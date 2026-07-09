@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Milvus RAG{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+<header class="shell">
+  <div class="shell__brand">IBM&nbsp;<span>Milvus RAG</span></div>
+  <nav class="shell__nav">
+    <a href="{% url 'document_list' %}" class="{% if nav == 'documentos' %}active{% endif %}">Documentos</a>
+    <a href="{% url 'upload' %}" class="{% if nav == 'upload' %}active{% endif %}">Upload</a>
+    <a href="{% url 'consulta' %}" class="{% if nav == 'consulta' %}active{% endif %}">Consulta</a>
+    <div class="sep"></div>
+    <a href="{% url 'squads' %}" class="{% if nav == 'squads' %}active{% endif %}">Squads</a>
+    <a href="{% url 'processes' %}" class="{% if nav == 'processes' %}active{% endif %}">Processos</a>
+  </nav>
+  <div class="shell__spacer"></div>
+  <div class="shell__user"><span class="shell__avatar">WS</span></div>
+</header>
+
+<main class="page">
+  {% if messages %}
+    {% for m in messages %}
+      <div class="notif notif--{% if m.tags == 'error' %}error{% elif m.tags == 'success' %}success{% elif m.tags == 'warning' %}warning{% else %}info{% endif %}">
+        <div>{% if m.tags == 'error' %}⚠️{% elif m.tags == 'success' %}✅{% else %}ℹ️{% endif %}</div>
+        <div>{{ m }}</div>
+      </div>
+    {% endfor %}
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

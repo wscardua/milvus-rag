@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.title|default:doc.original_filename }} · Milvus RAG{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{% url 'document_list' %}">Documentos</a> / {{ doc.squad_name }} / {{ doc.process_name }} /
+  {{ doc.title|default:doc.original_filename|default:"documento" }}
+</div>
+<div class="page-header header-flex">
+  <div>
+    <h1>{{ doc.title|default:doc.original_filename|default:"(sem título)" }}</h1>
+    <p><span class="badge badge--{{ doc.status }}">{{ doc.status }}</span>
+      {% if doc.ingested_at %}&nbsp; Ingerido em <span class="mono">{{ doc.ingested_at|slice:":16" }}</span>{% endif %}</p>
+  </div>
+</div>
+
+<div class="tile">
+  <h3>Vínculo e metadados do usuário</h3>
+  <div class="row">
+    <div class="field-static"><label>Squad</label><div><span class="tag tag--teal">{{ doc.squad_name }}</span></div></div>
+    <div class="field-static"><label>Processo</label><div><span class="tag tag--blue">{{ doc.process_name }}</span></div></div>
+    <div class="field-static"><label>Autor</label><div>{{ doc.author|default:"—" }}</div></div>
+    <div class="field-static"><label>doc_type</label><div>{{ doc.doc_type|default:"—" }}</div></div>
+    <div class="field-static"><label>Tags</label><div>{% for t in doc.tags %}<span class="tag">{{ t }}</span> {% empty %}—{% endfor %}</div></div>
+  </div>
+</div>
+
+<form method="post" class="tile">
+  <input type="hidden" name="action" value="save_classification">
+  <h2>Título, classificação &amp; resumo <span class="ai-hint">sugerido pela IA — edite se necessário</span></h2>
+  <div class="field">
+    <label>Título</label>
+    <input class="input suggested" name="title" value="{{ doc.title|default:'' }}">
+  </div>
+  <div class="row">
+    <div class="field">
+      <label>Categoria</label>
+      <select class="select suggested" name="category_id" id="cat" onchange="syncSub()">
+        <option value="">—</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if c.id == doc.category_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Subcategoria</label>
+      <select class="select suggested" name="subcategory_id" id="subcat">
+        <option value="">—</option>
+        {% for s in current_subcats %}<option value="{{ s.id }}" {% if s.id == doc.subcategory_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+  <div class="field">
+    <label>Resumo</label>
+    <textarea class="textarea suggested" name="summary">{{ doc.summary|default:'' }}</textarea>
+    <div class="helper">Fonte atual: <strong>{{ doc.classification_source|default:"—" }}</strong>. Salvar marca como override do usuário.</div>
+  </div>
+  <button class="btn btn--primary" type="submit">Salvar overrides</button>
+</form>
+
+<div class="tile">
+  <h2>Fluxo de documentos vinculados</h2>
+  <p style="color:var(--gray-70);margin:0 0 var(--s5)">Vínculos direcionados e tipados (mesma squad). A busca segue este fluxo; <code>substitui</code> é excluído do contexto.</p>
+
+  {% for ln in links %}
+    <div class="flow__node {% if ln.link_type == 'substitui' and ln.outgoing %}flow__node--obsolete{% endif %}" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+      <div>
+        <span class="flow__type flow__type--{{ ln.link_type }}">{{ ln.link_type }}</span>
+        {% if ln.outgoing %}
+          → <a href="{% url 'document_detail' document_id=ln.target_document_id %}">{{ ln.target_title }}</a>
+        {% else %}
+          ← <a href="{% url 'document_detail' document_id=ln.source_document_id %}">{{ ln.source_title }}</a> <span class="sub" style="display:inline">(entrada)</span>
+        {% endif %}
+      </div>
+      {% if ln.outgoing %}
+      <form method="post" onsubmit="return confirm('Remover vínculo?');">
+        <input type="hidden" name="action" value="remove_link">
+        <input type="hidden" name="link_id" value="{{ ln.id }}">
+        <button class="btn btn--danger btn--sm" type="submit">Remover</button>
+      </form>
+      {% endif %}
+    </div>
+  {% empty %}
+    <p class="sub" style="display:block">Sem vínculos.</p>
+  {% endfor %}
+
+  <form method="post" class="row" style="align-items:flex-end;margin-top:var(--s5)">
+    <input type="hidden" name="action" value="add_link">
+    <div class="field" style="margin:0;max-width:200px"><label>Tipo</label>
+      <select class="select" name="link_type">{% for t in link_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
+    <div class="field" style="margin:0"><label>Documento (mesma squad)</label>
+      <select class="select" name="target_document_id" required>
+        <option value="">Selecione…</option>
+        {% for c in candidates %}<option value="{{ c.id }}">{{ c.label }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn--ghost btn--sm" type="submit">＋ Adicionar vínculo</button>
+  </form>
+</div>
+
+{{ subcats|json_script:"subcats-data" }}
+{% endblock %}
+{% block scripts %}
+<script>
+  const SUBCATS = JSON.parse(document.getElementById('subcats-data').textContent);
+  function syncSub(){
+    const cid = document.getElementById('cat').value;
+    const sub = document.getElementById('subcat');
+    const items = SUBCATS[cid] || [];
+    sub.innerHTML = '<option value="">—</option>' +
+      items.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  }
+</script>
+{% endblock %}

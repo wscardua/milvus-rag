@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Consulta · Milvus RAG{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Consultar acervo</h1>
+  <p>Pergunte em linguagem natural. A resposta é sempre ancorada em trechos reais (grounding).</p>
+</div>
+
+<form method="post" class="tile">
+  <div class="field">
+    <label>Pergunta <span class="req">*</span></label>
+    <textarea class="textarea" name="question" required placeholder="Ex.: Qual a política de resposta a incidentes?">{{ question }}</textarea>
+  </div>
+  <div class="row">
+    <div class="field"><label>Squad (opcional)</label>
+      <select class="select" name="squad"><option value="">Todas</option>
+        {% for s in squads %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Categoria (opcional)</label>
+      <select class="select" name="category"><option value="">Todas</option>
+        {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>doc_type (opcional)</label>
+      <select class="select" name="doc_type"><option value="">Todos</option>
+        {% for t in doc_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
+  </div>
+  <button class="btn btn--primary" type="submit">Perguntar</button>
+</form>
+
+{% if result %}
+  {% if result.insufficient_context %}
+    <div class="notif notif--warning" style="margin-top:var(--s6)">
+      <div>⚠️</div>
+      <div><strong>Sem contexto suficiente</strong> — nenhum trecho relevante acima do limiar foi encontrado. Nenhuma resposta foi gerada (a API não alucina).</div>
+    </div>
+  {% else %}
+    <h3 style="font-weight:400;font-size:16px;margin:var(--s6) 0 var(--s5)">Resposta</h3>
+    <div class="answer"><p>{{ result.answer }}</p></div>
+
+    {% if result.citations %}
+      <h3 style="font-weight:600;font-size:14px;margin:var(--s6) 0 var(--s3)">Citações</h3>
+      {% for c in result.citations %}
+        <div class="citation">
+          <div class="citation__head">
+            <a href="{% url 'document_detail' document_id=c.document_id %}">📄 documento · chunk {{ c.chunk_id|slice:':8' }}</a>
+            <span class="score">score {{ c.score }}</span>
+          </div>
+          <div class="citation__snippet">{{ c.snippet }}</div>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if result.linked_flow %}
+      <h3 style="font-weight:600;font-size:14px;margin:var(--s6) 0 var(--s3)">Fluxo de documentos relacionados</h3>
+      <div class="notif notif--info" style="border-color:var(--teal-60)">
+        <div>🔗</div>
+        <div>
+          {% for f in result.linked_flow %}
+            <div style="margin-bottom:.35rem">
+              <a href="{% url 'document_detail' document_id=f.source_document_id %}">origem</a>
+              <span class="flow__type flow__type--{{ f.link_type }}">{{ f.link_type }}</span>
+              <a href="{% url 'document_detail' document_id=f.target_document_id %}">alvo</a>
+              {% if f.included %}<span class="sub" style="display:inline">· considerado</span>{% else %}<span class="sub" style="display:inline">· excluído (obsoleto)</span>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,51 @@
+"""Configuração única do backend (ADR-0006): tudo vem de env, nada hardcoded.
+
+Migrar para serviços gerenciados (Postgres gerenciado, Zilliz Cloud, LLM na nuvem)
+é troca de .env — sem mudança de código.
+"""
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+    # Banco
+    database_url: str = "postgresql+psycopg2://rag:rag@localhost:5432/rag"
+
+    # Milvus
+    milvus_host: str = "localhost"
+    milvus_port: int = 19530
+    milvus_collection: str = "rag_chunks"
+
+    # LM Studio (embeddings + chat, API OpenAI-compatível)
+    lm_studio_base_url: str = "http://localhost:1234/v1"
+    lm_studio_api_key: str = "lm-studio"
+    embedding_model: str = "embeddinggemma-300m"
+    embedding_dim: int = 768
+    chat_model: str = "local-chat-model"
+
+    # Upload
+    upload_dir: str = "../../data/uploads"
+    max_upload_mb: int = 50
+
+    # Worker de ingestão (ADR-0004 / ADR-0009) — segundos, exceto max_attempts
+    worker_poll_interval: int = 5
+    worker_heartbeat_interval: int = 30
+    worker_visibility_timeout: int = 300  # 5 min
+    worker_max_attempts: int = 3
+    worker_retry_backoff_base: int = 60  # backoff: base * 2^(attempts-1)
+
+    # Retrieval
+    retrieval_top_k: int = 5
+    retrieval_min_score: float = 0.3  # abaixo disto: "sem contexto suficiente" (COSINE)
+
+    # Chunking (ADR-0002: chunk < 2048 tokens do modelo)
+    chunk_size_words: int = 350
+    chunk_overlap_words: int = 60
+
+
+settings = Settings()

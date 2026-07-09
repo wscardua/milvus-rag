@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Processos · Milvus RAG{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Processos de Delivery</h1>
+  <p>Entregas de uma squad. Cada documento é associado a um processo no upload.</p>
+</div>
+
+<div class="tile">
+  <h3>Novo processo</h3>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="action" value="create">
+    <div class="field" style="margin:0"><label>Squad <span class="req">*</span></label>
+      <select class="select" name="squad_id" required>
+        <option value="">Selecione…</option>
+        {% for s in squads %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select></div>
+    <div class="field" style="margin:0"><label>Nome <span class="req">*</span></label>
+      <input class="input" name="name" required placeholder="Ex.: Antifraude"></div>
+    <div class="field" style="margin:0;flex:2"><label>Descrição</label>
+      <input class="input" name="description" placeholder="Objetivo da entrega"></div>
+    <button class="btn btn--primary btn--sm" type="submit">＋ Criar</button>
+  </form>
+</div>
+
+<div class="table-toolbar">
+  <form method="get">
+    <label style="color:var(--gray-70);font-size:12px">Filtrar por squad:</label>
+    <select class="select" name="squad_id" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      {% for s in squads %}<option value="{{ s.id }}" {% if s.id == squad_filter %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+    </select>
+  </form>
+</div>
+<table>
+  <thead><tr><th>Processo</th><th>Squad</th><th>Descrição</th><th>Documentos</th><th>Ações</th></tr></thead>
+  <tbody>
+    {% for p in processes %}
+    <tr>
+      <td>{{ p.name }}</td>
+      <td><span class="tag tag--teal">{{ p.squad_name }}</span></td>
+      <td>{{ p.description|default:"—" }}</td>
+      <td>{{ p.document_count }}</td>
+      <td class="rowactions">
+        <form method="post" onsubmit="return confirm('Remover o processo {{ p.name }}?');">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="{{ p.id }}">
+          <button class="btn btn--danger btn--sm" type="submit">Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="empty">Nenhum processo cadastrado.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
