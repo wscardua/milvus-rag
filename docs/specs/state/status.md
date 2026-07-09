@@ -21,6 +21,7 @@ Memória operacional única e enxuta. Substitui a máquina completa de workflow-
 
 ## Changelog
 
+- 2026-07-09 — `/enviar-pr` refatorado para **gate único de autorização**: resumo antes de alterar qualquer coisa e uma aprovação que cobre todos os passos até o merge (sem re-confirmar); trava de segurança mantida para achados críticos no review.
 - 2026-07-09 — Adicionado slash command `/enviar-pr` (`.claude/commands/`): orquestra o fluxo de PR (sync → atualizar specs/docs → branch/commit → PR → review → merge → sync), derivando a descrição do diff quando não informada.
 - 2026-07-09 — **ADR-0006** (parametrização: tudo por env, config única, POC local → gerenciados). Persistência dos containers migrada de volumes nomeados para **bind mounts no projeto** (`data/volumes/`, via `DATA_DIR`), separada de `data/uploads/`. Stack recriada e validada (todos healthy, dados gravando em `data/volumes/`). ADR-0003, backend-api, ops/README e .gitignore atualizados.
 - 2026-07-09 — **ADR-0004** (ingestão assíncrona: worker daemon + fila `ingestion_job` no Postgres, embeddings em lote) e **ADR-0005** (MCP como cliente HTTP da API). Nova feature **FEAT-MCP-001**; FEAT-INGEST-001 → v0.4.0 (worker). Estrutura (ADR-0003) ganhou `apps/api/app/worker.py` e `apps/mcp/`; arquitetura e overview propagados.
