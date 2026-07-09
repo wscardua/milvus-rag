@@ -53,6 +53,13 @@ Memória operacional única e enxuta. Substitui a máquina completa de workflow-
 - Estrutura de código (`apps/web/`, `apps/api/`, `ops/`) ainda não criada.
 - Definir o **prompt de classificação/resumo** que restringe a saída da IA à taxonomia (`reference/taxonomy.md`) — FEAT-INGEST-001.
 - Detalhar payloads/erros dos contratos estendidos na implementação (`organization-admin`, `PATCH` de overrides).
+- **Achados de review (PR #4) — follow-ups não críticos (POC):**
+  - Worker: heartbeat não é renovado durante o processamento (só no claim); doc que leve > `WORKER_VISIBILITY_TIMEOUT` pode ser reivindicado em paralelo. Implementar heartbeat periódico (thread/tick). Pipeline é idempotente, então o risco é retrabalho, não corrupção.
+  - Upload via API com `links[]` inválidos: `IntegrityError`/`ValidationError` no commit não são tratados → 500 + arquivo órfão em `data/uploads/`. Envolver em try/except e limpar o arquivo. (A UI não envia `links` no upload.)
+  - Embeddings enviados num único lote; documentos muito grandes podem exceder o limite do LM Studio. Fatiar em sub-lotes.
+  - Consulta (UI): filtro `delivery_process` é suportado pela API mas não há select na tela; adicionar select dependente de squad.
+  - UI: erros 422 da API (detail em lista) aparecem como repr cru; formatar mensagem amigável. Detalhe redireciona se qualquer GET secundário falhar (acoplamento); ícone de `warning` usa ℹ️.
+  - Reindexação: embora embeddings venham antes do delete, delete(Milvus)+upsert não são transacionais com o Postgres; falha entre eles deixa janela até o próximo retry.
 
 ## Mapa de integração
 

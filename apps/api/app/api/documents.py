@@ -138,6 +138,10 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
         if eff_cat is not None and sub.category_id != eff_cat:
             raise HTTPException(422, "Subcategoria não pertence à categoria informada.")
 
+    # trocar categoria sem informar subcategoria zera a subcategoria (evita par inconsistente)
+    if "category_id" in data and "subcategory_id" not in data:
+        doc.subcategory_id = None
+
     for field, value in data.items():
         setattr(doc, field, value)
     if data:

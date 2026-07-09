@@ -27,6 +27,7 @@ def _apply_classification(session: Session, doc: Document, text: str) -> None:
         cat = session.scalar(select(Category).where(Category.name == sug.get("category")))
         if cat:
             doc.category_id = cat.id
+            doc.subcategory_id = None  # evita manter subcategoria de outra categoria
             sub = session.scalar(
                 select(Subcategory).where(
                     Subcategory.category_id == cat.id, Subcategory.name == sug.get("subcategory")
@@ -54,14 +55,16 @@ def ingest_document(session: Session, doc: Document) -> None:
     if not chunks:
         raise PermanentIngestionError("Nenhum chunk gerado.")
 
-    # idempotência: remove chunks/vetores anteriores deste documento
+    # embeddings primeiro: se falhar, ainda não apagamos o índice antigo (reduz janela de inconsistência)
+    vectors = embeddings.embed_texts(chunks)
+
+    # idempotência: remove chunks/vetores anteriores deste documento só depois de ter os novos vetores
     doc_id = str(doc.id)
     vectorstore.delete_by_document(doc_id)
     for old in session.scalars(select(Chunk).where(Chunk.document_id == doc.id)):
         session.delete(old)
     session.flush()
 
-    vectors = embeddings.embed_texts(chunks)
     squad_id = str(doc.delivery_process.squad_id)
     rows = []
     for ordinal, (content, vector) in enumerate(zip(chunks, vectors)):

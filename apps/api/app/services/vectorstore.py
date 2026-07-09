@@ -59,7 +59,9 @@ def search(vector: list[float], top_k: int, filters: dict | None = None) -> list
     for field in _PAYLOAD_FIELDS:
         val = (filters or {}).get(field)
         if val:
-            exprs.append(f'{field} == "{val}"')
+            # escapa aspas/barra para evitar injeção na expressão de filtro do Milvus
+            safe = str(val).replace("\\", "\\\\").replace('"', '\\"')
+            exprs.append(f'{field} == "{safe}"')
     expr = " and ".join(exprs) if exprs else ""
     res = _c().search(
         collection_name=settings.milvus_collection,
