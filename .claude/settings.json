@@ -9,8 +9,7 @@
       "Bash(venv/bin/python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('insufficient:',d['insufficient_context'],'| answer:',\\(d['answer'] or ''\\)[:80],'| citações:',len\\(d['citations']\\)\\)\")",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" -X POST http://127.0.0.1:8001/query -H 'Content-Type: application/json' -d '{\"question\":\"x\",\"filters\":{\"squad\":\"a\\\\\" or chunk_id != \\\\\"\"}}')",
       "Bash(git add *)",
-      "Bash(grep -iE '\\\\.env$|venv/|data/|\\\\.log$')",
-      "Bash(gh pr create --base main --head update/processo-e-logs --title 'WORK-003 — Exclusão/visualização de documentos, feedback de consulta e observabilidade \\(logs & saúde\\)' --body ' *)"
+      "Bash(grep -iE '\\\\.env$|venv/|data/|\\\\.log$')"
     ]
   }
 }
