@@ -31,8 +31,9 @@ ajuste `MCP_TRANSPORT` no `.env` (evolução futura — a POC é local, sem auth
 | `list_documents(filters?)` | `GET /documents` | acervo por categoria/metadado |
 | `get_document(id)` | `GET /documents/{id}` | metadados + estado de ingestão |
 
-`filters` aceita `squad`, `delivery_process`, `category`, `doc_type`, `tags`
-(`list_documents` também aceita `limit`/`offset`).
+`filters` aceita `squad`, `delivery_process`, `category`, `doc_type`
+(`list_documents` também aceita `limit`/`offset`). Obs.: `tags` **não** é filtro
+de retrieval na POC (o Milvus não indexa `tags`) — ver Lacunas no `status.md`.
 
 Com a API fora do ar, as tools retornam **erro explícito** ao agente (não inventam resposta).
 

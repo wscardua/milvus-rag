@@ -25,7 +25,10 @@ def _request(method: str, path: str, **kwargs) -> dict | list:
     if resp.status_code >= 400:
         # repassa o detalhe da API sem mascarar o status
         raise ApiError(f"API respondeu {resp.status_code}: {resp.text}")
-    return resp.json()
+    try:
+        return resp.json()
+    except ValueError as exc:  # corpo 200 não-JSON (proxy/gateway) → mantém o contrato ApiError
+        raise ApiError(f"Resposta não-JSON da API ({resp.status_code}): {resp.text[:200]}") from exc
 
 
 def query(question: str, filters: dict | None = None, top_k: int | None = None) -> dict:

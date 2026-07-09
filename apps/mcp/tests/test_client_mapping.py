@@ -93,6 +93,17 @@ def test_http_error_surfaced(monkeypatch):
     assert "502" in str(exc.value)
 
 
+def test_non_json_200_becomes_apierror(monkeypatch):
+    """Corpo 200 não-JSON (ex.: proxy) → ApiError, não exceção crua."""
+    class _BadJson(_FakeResp):
+        def json(self):
+            raise ValueError("Expecting value")
+
+    _fake_httpx(monkeypatch, resp=_BadJson(200, text="<html>gateway</html>"))
+    with pytest.raises(client.ApiError):
+        client.query("oi")
+
+
 def test_tool_translates_apierror_to_error(monkeypatch):
     """Com a API fora, a tool retorna erro explícito ao agente (não alucina)."""
     def _boom(*a, **k):

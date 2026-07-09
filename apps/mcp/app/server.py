@@ -28,7 +28,7 @@ def search_documents(
 
     A resposta é ancorada nos documentos (grounding): sempre acompanha `citations`
     (chunk + documento de origem) e `linked_flow` (documentos vinculados considerados).
-    `filters` opcional: squad, delivery_process, category, doc_type, tags.
+    `filters` opcional: squad, delivery_process, category, doc_type.
     Se não houver contexto suficiente, `insufficient_context=true` e `answer=null`.
     """
     try:
