@@ -1,6 +1,6 @@
 # Contrato — Upload e Metadados
 
-Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /documents/{id}`).
+Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/file`, `DELETE /documents/{id}`).
 
 ## Upload — requisição
 
@@ -29,6 +29,16 @@ Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /document
 
 - `GET /documents/{id}` → `document_id`, `status`, `metadata` (squad/processo, `category`/`subcategory`/`summary`, `classification_source`, `ingested_at`), `error?`, timestamps.
 - `GET /documents?filtro` → lista paginada com filtros por metadado, incluindo `squad`, `delivery_process`, `category`, `doc_type`, `status`.
+
+## Acesso ao arquivo — ADR-0010
+
+- `GET /documents/{id}/file` → serve o arquivo original. Query `download=true` → `Content-Disposition: attachment` (baixar); padrão → `inline` (visualização). Nome de arquivo codificado por RFC 5987 (acentos). `404` se o documento ou o arquivo não existir.
+- `storage_path` **não** é exposto no payload de metadados (fica server-side). A UI Django faz **proxy** deste endpoint — o browser nunca acessa o disco/porta da API diretamente.
+
+## Exclusão — ADR-0010
+
+- `DELETE /documents/{id}` → **hard delete**. Remove vetores no Milvus, a linha `document` (cascade em `chunk`, `ingestion_job`, `document_link`) e o arquivo em disco. `204` em sucesso; `404` se inexistente.
+- `query_log` **não** é afetado (histórico de avaliação sobrevive à exclusão — ADR-0011).
 
 ## Regras
 

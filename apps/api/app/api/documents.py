@@ -6,7 +6,8 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy import func, select
+from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.links import create_document_link
@@ -23,7 +24,7 @@ from app.db.models import (
     Subcategory,
 )
 from app.schemas.document import DocumentOut, DocumentUpdate, LinkIn
-from app.services import storage
+from app.services import eventlog, storage, vectorstore
 
 router = APIRouter(tags=["documents"])
 
@@ -149,3 +150,57 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
     session.commit()
     session.refresh(doc)
     return to_document_out(session, doc)
+
+
+@router.get("/documents/{document_id}/file")
+def get_document_file(
+    document_id: uuid.UUID,
+    download: bool = False,
+    session: Session = Depends(get_session),
+):
+    """Serve o arquivo original para visualização (inline) ou download (attachment).
+
+    Fonte da verdade do arquivo é a API (ADR-0010): a UI Django faz proxy, nunca lê o disco.
+    """
+    doc = session.get(Document, document_id)
+    if not doc:
+        raise HTTPException(404, "Documento não encontrado.")
+    if not doc.storage_path or not os.path.exists(doc.storage_path):
+        raise HTTPException(404, "Arquivo do documento indisponível.")
+    # FileResponse cuida da codificação do filename (RFC 5987) p/ nomes acentuados.
+    return FileResponse(
+        doc.storage_path,
+        media_type=doc.mime_type or "application/octet-stream",
+        filename=doc.original_filename or str(document_id),
+        content_disposition_type="attachment" if download else "inline",
+    )
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+def delete_document(document_id: uuid.UUID, session: Session = Depends(get_session)):
+    """Exclui o documento e tudo que o rastreia (ADR-0010).
+
+    Ordem: vetores no Milvus → linha no Postgres (cascade em chunk/ingestion_job/
+    document_link) → arquivo em disco. `query_log` NÃO é afetado (histórico de avaliação).
+    """
+    doc = session.get(Document, document_id)
+    if not doc:
+        raise HTTPException(404, "Documento não encontrado.")
+
+    storage_path = doc.storage_path
+    original_filename = doc.original_filename
+
+    # 1) vetores no índice (antes do Postgres: se falhar, doc/chunks seguem rastreáveis)
+    vectorstore.delete_by_document(str(document_id))
+    # 2) Postgres: cascade remove chunk / ingestion_job / document_link
+    session.delete(doc)
+    session.commit()
+    # 3) arquivo físico (best-effort; a fonte de verdade relacional já foi removida)
+    storage.delete_file(storage_path)
+
+    eventlog.log_event(
+        "INFO", "api", "document_deleted",
+        f"Documento {document_id} excluído.",
+        document_id=document_id, original_filename=original_filename,
+    )
+    return None

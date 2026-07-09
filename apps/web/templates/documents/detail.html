@@ -11,6 +11,18 @@
     <p><span class="badge badge--{{ doc.status }}">{{ doc.status }}</span>
       {% if doc.ingested_at %}&nbsp; Ingerido em <span class="mono">{{ doc.ingested_at|slice:":16" }}</span>{% endif %}</p>
   </div>
+  <div class="header-actions">
+    {% if doc.original_filename %}
+      {% if doc.previewable %}
+        <button class="btn btn--secondary btn--sm" type="button" onclick="openDocModal()">👁 Visualizar</button>
+      {% endif %}
+      <a class="btn btn--secondary btn--sm" href="{% url 'document_file' document_id=doc.id %}?download=1">⬇ Baixar</a>
+    {% endif %}
+    <form method="post" onsubmit="return confirm('Excluir este documento? Chunks e vetores serão removidos e a ação é irreversível.');">
+      <input type="hidden" name="action" value="delete_document">
+      <button class="btn btn--danger btn--sm" type="submit">🗑 Excluir</button>
+    </form>
+  </div>
 </div>
 
 <div class="tile">
@@ -94,6 +106,19 @@
   </form>
 </div>
 
+{% if doc.previewable %}
+<div class="modal" id="doc-modal" aria-hidden="true">
+  <div class="modal__backdrop" onclick="closeDocModal()"></div>
+  <div class="modal__dialog" role="dialog" aria-modal="true">
+    <div class="modal__head">
+      <strong>{{ doc.original_filename }}</strong>
+      <button class="modal__close" type="button" onclick="closeDocModal()" aria-label="Fechar">✕</button>
+    </div>
+    <iframe class="modal__frame" id="doc-frame" title="Visualização do documento"></iframe>
+  </div>
+</div>
+{% endif %}
+
 {{ subcats|json_script:"subcats-data" }}
 {% endblock %}
 {% block scripts %}
@@ -106,5 +131,16 @@
     sub.innerHTML = '<option value="">—</option>' +
       items.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   }
+
+  const FILE_URL = "{% url 'document_file' document_id=doc.id %}";
+  function openDocModal(){
+    const frame = document.getElementById('doc-frame');
+    if (!frame.src) frame.src = FILE_URL;          // carrega sob demanda
+    document.getElementById('doc-modal').classList.add('modal--open');
+  }
+  function closeDocModal(){
+    document.getElementById('doc-modal').classList.remove('modal--open');
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDocModal(); });
 </script>
 {% endblock %}

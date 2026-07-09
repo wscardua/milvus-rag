@@ -1,5 +1,7 @@
-"""Schemas do contrato query-and-citations (ADR-0008)."""
+"""Schemas do contrato query-and-citations (ADR-0008/0011)."""
 from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -25,7 +27,12 @@ class LinkedFlow(BaseModel):
 
 
 class QueryResponse(BaseModel):
+    query_id: str  # id do query_log — âncora do feedback (ADR-0011)
     answer: str | None
     insufficient_context: bool
     citations: list[Citation]
     linked_flow: list[LinkedFlow]
+
+
+class FeedbackRequest(BaseModel):
+    rating: Literal["up", "down"]  # 👍 / 👎

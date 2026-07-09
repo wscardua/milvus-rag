@@ -35,6 +35,13 @@
     <h3 style="font-weight:400;font-size:16px;margin:var(--s6) 0 var(--s5)">Resposta</h3>
     <div class="answer"><p>{{ result.answer }}</p></div>
 
+    <div class="feedback" id="feedback" data-query-id="{{ result.query_id }}">
+      <span class="feedback__label">Esta resposta foi útil?</span>
+      <button class="btn btn--ghost btn--sm feedback__btn" type="button" data-rating="up" onclick="sendFeedback('up')">👍</button>
+      <button class="btn btn--ghost btn--sm feedback__btn" type="button" data-rating="down" onclick="sendFeedback('down')">👎</button>
+      <span class="feedback__thanks" id="feedback-thanks"></span>
+    </div>
+
     {% if result.citations %}
       <h3 style="font-weight:600;font-size:14px;margin:var(--s6) 0 var(--s3)">Citações</h3>
       {% for c in result.citations %}
@@ -66,4 +73,28 @@
     {% endif %}
   {% endif %}
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  function sendFeedback(rating){
+    const box = document.getElementById('feedback');
+    const qid = box.dataset.queryId;
+    const thanks = document.getElementById('feedback-thanks');
+    const body = new URLSearchParams({query_id: qid, rating: rating});
+    fetch("{% url 'query_feedback' %}", {method: 'POST', body})
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok){
+          box.querySelectorAll('.feedback__btn').forEach(b => {
+            b.disabled = true;
+            b.classList.toggle('voted', b.dataset.rating === rating);
+          });
+          thanks.textContent = 'Obrigado pelo feedback!';
+        } else {
+          thanks.textContent = 'Falha ao registrar: ' + (d.error || 'erro');
+        }
+      })
+      .catch(() => { thanks.textContent = 'Falha de rede ao registrar feedback.'; });
+  }
+</script>
 {% endblock %}

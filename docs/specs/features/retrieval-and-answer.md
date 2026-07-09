@@ -1,7 +1,7 @@
 ---
 id: FEAT-QUERY-001
 title: Consulta e Resposta com Citações
-version: 0.4.0
+version: 0.5.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
@@ -9,7 +9,7 @@ created: 2026-07-09
 updated: 2026-07-09
 contracts: [query-and-citations]
 depends_on: [FEAT-INGEST-001]
-adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008]
+adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008, ADR-0011]
 ---
 
 # Feature — Consulta e Resposta com Citações
@@ -27,6 +27,8 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - **Expansão por vínculos (ADR-0008):** 1 salto seguindo `document_link` — inclui alvos de `esclarece`/`complementa`/`precede`; exclui alvos de `substitui` (obsoletos).
 - Geração de resposta com citações (documento/trecho) e **`linked_flow[]`** informando o fluxo de documentos vinculados considerados.
 - Sinalização de "sem contexto suficiente".
+- **Auditoria da consulta (ADR-0011):** toda `/query` é gravada no `query_log` com métricas (scores, modelos, params de chunking, latência); a resposta traz `query_id`.
+- **Feedback 👍/👎** da resposta (`POST /query/{query_id}/feedback`) para avaliar qualidade e azeitar modelo/chunk.
 ### Fora de escopo
 - Conversa multi-turno com memória (fora da POC).
 - Expansão multi-salto (transitiva) de vínculos — só 1 salto na POC (ADR-0008).
@@ -58,12 +60,12 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - Conteúdo dos chunks (inclusive dos documentos expandidos) é entrada não confiável ao montar o prompt (mitigar prompt injection).
 
 ## 7. Contratos e integrações
-- Contrato: `query-and-citations` (`POST /query`) — resposta com `citations[]` e `linked_flow[]` (ADR-0008).
-- Integrações: Milvus (busca vetorial) e Postgres (chunks/metadados, grafo `document_link`; opcional `query_log`).
+- Contrato: `query-and-citations` (`POST /query` → resposta com `query_id`, `citations[]`, `linked_flow[]`; `POST /query/{query_id}/feedback`).
+- Integrações: Milvus (busca vetorial) e Postgres (chunks/metadados, grafo `document_link`, `query_log`).
 
 ## 8. Dados e persistência
 - Leitura de `chunk`, metadados e `document_link` (expansão de contexto).
-- Opcional: `query_log` (pergunta, chunks recuperados, citações, fluxo) para auditoria/avaliação.
+- `query_log` (ADR-0011): **toda** consulta gravada — pergunta, filtros, `top_k`, resposta, citações, `linked_flow`, `scores[]`, ids recuperados, `embedding_model`/`chat_model`, params de chunking, `retrieval_min_score`, `latency_ms`, e `rating`/`rating_at` (feedback). Sem FK para `document`/`chunk` (snapshot — sobrevive à exclusão).
 
 ## 9. Segurança, privacidade e riscos
 - Prompt injection via conteúdo dos documentos → isolar/sanitizar contexto.
@@ -71,9 +73,11 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - Risco de alucinação → mitigado por grounding e limiar de similaridade.
 
 ## 10. Critérios de aceite
-- [ ] Resposta cita chunks reais recuperados (grounding).
-- [ ] Sem contexto suficiente, a API sinaliza em vez de alucinar.
-- [ ] Filtros por metadado restringem corretamente o retrieval.
+- [x] Resposta cita chunks reais recuperados (grounding).
+- [x] Sem contexto suficiente, a API sinaliza em vez de alucinar.
+- [x] Filtros por metadado restringem corretamente o retrieval.
+- [x] Toda consulta grava `query_log` com métricas; a resposta traz `query_id`.
+- [x] Feedback 👍/👎 grava `rating`/`rating_at`; `query_id` inexistente → `404`; rating inválido → `422`.
 
 ## 11. Testes esperados
 - **Unitário:** montagem de contexto/prompt; deduplicação; limiar.
@@ -88,15 +92,16 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - LM Studio ativo (API OpenAI-compatível) para embedding da pergunta e geração — modelos de embedding e chat carregados.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack. ADR-0002 — embeddings locais e LLM via LM Studio. ADR-0007 — filtros por squad/processo. ADR-0008 — expansão de retrieval por vínculos + `linked_flow[]`.
+- ADR-0001 — stack. ADR-0002 — embeddings locais e LLM via LM Studio. ADR-0007 — filtros por squad/processo. ADR-0008 — expansão de retrieval por vínculos + `linked_flow[]`. ADR-0011 — `query_log` (auditoria + métricas) e feedback 👍/👎.
 
 ## 14. Pendências e questões em aberto
-- Calibrar limiar de similaridade COSINE para "sem contexto suficiente" (`top_k` default 5 já fixado).
-- Definir se `query_log` entra na POC (auditoria/avaliação).
+- Calibrar limiar de similaridade COSINE para "sem contexto suficiente" (`top_k` default 5 já fixado). O `query_log` (scores/rating/latency) agora fornece dados para essa calibração.
+- ~~Definir se `query_log` entra na POC~~ → **resolvido (ADR-0011): entra, gravando toda consulta.**
 
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-09 | 0.5.0 | - | `query_log` (toda consulta + métricas de tuning) e feedback 👍/👎; `query_id` na resposta | WORK-003, ADR-0011 |
 | 2026-07-09 | 0.4.0 | - | Filtros por squad/processo; expansão de retrieval por vínculos (1 salto, `substitui` excluído) + `linked_flow[]` na resposta | ADR-0007, ADR-0008 |
 | 2026-07-09 | 0.3.0 | - | Embedding da pergunta via `embeddinggemma-300m` (LM Studio) | ADR-0002 (rev.) |
 | 2026-07-09 | 0.2.0 | - | Geração via LM Studio, embeddings bge-m3 e top_k default fixados; spec aprovada | ADR-0002 |

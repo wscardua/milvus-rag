@@ -24,6 +24,7 @@ Estes valores são **contrato**: mudá-los exige novo ADR + **reindexação** de
 ## Regras
 
 - Todo vetor referencia um chunk rastreável no Postgres.
+- **Exclusão de documento (ADR-0010)**: os vetores do documento são removidos por `document_id` (`delete_by_document`) antes de apagar a linha no Postgres — mantém o invariante "nenhum vetor órfão". A reindexação (ingestão idempotente) usa o mesmo delete-por-documento antes de reinserir.
 - Filtros por metadado no retrieval usam os mesmos campos persistidos no Postgres/payload.
 - Retrieval usa o mesmo modelo de embeddings (`embeddinggemma-300m`, via LM Studio) da indexação.
 - A conexão com o Milvus é configurável (host/porta) para casar com o container em `ops/`.
