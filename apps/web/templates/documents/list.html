@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Documentos · Milvus RAG{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Documentos</h1>
+  <p>Acervo submetido ao RAG. Cada documento pertence a um processo de delivery de uma squad.
+     O <strong>status</strong> reflete a ingestão assíncrona.</p>
+</div>
+
+<div class="table-toolbar">
+  <form method="get">
+    <select class="select" name="squad_id" onchange="this.form.submit()">
+      <option value="">Todas as squads</option>
+      {% for s in squads %}<option value="{{ s.id }}" {% if filters.squad_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+    </select>
+    <select class="select" name="category_id" onchange="this.form.submit()">
+      <option value="">Todas as categorias</option>
+      {% for c in categories %}<option value="{{ c.id }}" {% if filters.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <select class="select" name="doc_type" onchange="this.form.submit()">
+      <option value="">Todos os tipos</option>
+      {% for t in doc_types %}<option value="{{ t }}" {% if filters.doc_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+    <a class="btn btn--ghost btn--sm" href="{% url 'document_list' %}">Limpar</a>
+  </form>
+</div>
+<table>
+  <thead><tr><th>Título</th><th>Squad / Processo</th><th>Categoria</th><th>Status</th><th>Ingerido em</th></tr></thead>
+  <tbody>
+    {% for d in documents %}
+    <tr class="clickable" onclick="location.href='{% url 'document_detail' document_id=d.id %}'">
+      <td>{{ d.title|default:d.original_filename|default:"(sem título)" }}
+        <span class="sub">{{ d.doc_type|default:"—" }}</span></td>
+      <td>{{ d.squad_name }}<span class="sub">{{ d.process_name|default:"—" }}</span></td>
+      <td>{% if d.category_name %}{{ d.category_name }} <span class="ai-hint">IA</span>{% else %}—{% endif %}</td>
+      <td><span class="badge badge--{{ d.status }}">{{ d.status }}</span></td>
+      <td class="mono">{% if d.ingested_at %}{{ d.ingested_at|slice:":16" }}{% else %}—{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="empty">Nenhum documento. <a href="{% url 'upload' %}">Enviar o primeiro</a>.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

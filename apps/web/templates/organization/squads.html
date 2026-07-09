@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Squads · Milvus RAG{% endblock %}
+{% block content %}
+<div class="page-header header-flex">
+  <div>
+    <h1>Squads</h1>
+    <p>Times de delivery. Cada squad agrupa seus processos e, por eles, seus documentos.</p>
+  </div>
+</div>
+
+<div class="tile">
+  <h3>Nova squad</h3>
+  <form method="post" class="row" style="align-items:flex-end">
+    <input type="hidden" name="action" value="create">
+    <div class="field" style="margin:0"><label>Nome <span class="req">*</span></label>
+      <input class="input" name="name" required placeholder="Ex.: Squad Pagamentos"></div>
+    <div class="field" style="margin:0;flex:2"><label>Descrição</label>
+      <input class="input" name="description" placeholder="Responsabilidade da squad"></div>
+    <button class="btn btn--primary btn--sm" type="submit">＋ Criar</button>
+  </form>
+</div>
+
+<table>
+  <thead><tr><th>Nome</th><th>Descrição</th><th>Processos</th><th>Documentos</th><th>Ações</th></tr></thead>
+  <tbody>
+    {% for s in squads %}
+    <tr>
+      <td>{{ s.name }}</td>
+      <td>{{ s.description|default:"—" }}</td>
+      <td>{{ s.process_count }}</td>
+      <td>{{ s.document_count }}</td>
+      <td class="rowactions">
+        <form method="post" onsubmit="return confirm('Remover a squad {{ s.name }}?');">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="{{ s.id }}">
+          <button class="btn btn--danger btn--sm" type="submit">Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="empty">Nenhuma squad cadastrada.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,15 +1,15 @@
 ---
 id: FEAT-UPLOAD-001
 title: Upload e Metadados de Documento
-version: 0.2.0
+version: 0.3.0
 status_spec: aprovada
-status_impl: nao_iniciada
+status_impl: implementada
 owner: -
 created: 2026-07-09
 updated: 2026-07-09
-contracts: [upload-and-metadata]
+contracts: [upload-and-metadata, document-links]
 depends_on: []
-adrs: [ADR-0001, ADR-0002]
+adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008]
 ---
 
 # Feature — Upload e Metadados de Documento
@@ -22,12 +22,14 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 
 ## 3. Escopo
 ### Incluído
-- Formulário de upload de arquivo(s) com metadados (`title`, `author`, `tags`, `doc_type`).
+- **Vínculo obrigatório a Squad → Processo de Delivery** (ADR-0007) — selects dependentes.
+- Formulário de upload de arquivo(s) com metadados: `title` (**opcional** — IA sugere, ADR-0007), `author`, `tags`, `doc_type`.
+- **Vínculos iniciais opcionais** a outros documentos da mesma squad (ADR-0008).
 - **Tipos aceitos:** PDF, DOCX, TXT/Markdown, HTML, `.py`, XLS/XLSX (ADR-0002).
 - Criação do documento na API e disparo da ingestão.
 - Exibição do estado de ingestão do documento.
 ### Fora de escopo
-- Extração/chunking/embeddings (ver FEAT-INGEST-001).
+- Extração/chunking/embeddings e sugestão de `title`/classificação (ver FEAT-INGEST-001).
 - Versionamento de documento e reupload com histórico (fora da POC).
 
 ## 4. Atores e pré-condições
@@ -36,14 +38,15 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 
 ## 5. Comportamento e fluxos
 ### Fluxo principal
-1. (Django) Usuário seleciona arquivo(s) e preenche metadados.
-2. (Django) UI valida tipo/tamanho e campos obrigatórios.
-3. (FastAPI `POST /documents`) API revalida, cria `document`, persiste metadados e dispara ingestão idempotente.
+1. (Django) Usuário escolhe **squad → processo** (obrigatórios), seleciona arquivo(s), preenche metadados (título opcional) e, opcionalmente, vínculos.
+2. (Django) UI valida tipo/tamanho, `delivery_process_id` e campos obrigatórios.
+3. (FastAPI `POST /documents`) API revalida, cria `document` (vinculado ao processo), aplica `links[]` (mesma squad), persiste metadados e dispara ingestão idempotente.
 4. (FastAPI → Postgres) Cria `ingestion_job` com estado `pending`.
 5. (Django) UI exibe o documento com estado `pending`/`processing`/`indexed`/`failed`.
 ### Fluxos alternativos e de erro
 - Tipo/tamanho inválido → rejeição com mensagem clara (sem criar documento).
-- Metadado obrigatório ausente → erro de validação.
+- Squad/processo ausente ou vínculo fora da squad → erro de validação (`422`).
+- Título vazio → aceito; IA sugere na ingestão (fallback = nome do arquivo).
 - Falha ao criar documento na API → mensagem de erro; nada é persistido.
 
 ## 6. Regras de domínio
@@ -52,11 +55,12 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - Upload trata o arquivo como entrada não confiável (tipo/tamanho validados; conteúdo só é processado na ingestão).
 
 ## 7. Contratos e integrações
-- Contrato: `upload-and-metadata` (`POST /documents`, `GET /documents`, `GET /documents/{id}`).
-- Erros previstos: `400` (validação), `413` (tamanho), `415` (tipo não suportado).
+- Contratos: `upload-and-metadata` (`POST /documents`, `GET /documents`, `GET /documents/{id}`) e `document-links` (vínculos iniciais, ADR-0008).
+- Erros previstos: `400` (validação), `413` (tamanho), `415` (tipo não suportado), `422` (squad/processo ou vínculo inválido).
 
 ## 8. Dados e persistência
-- `document`: arquivo + metadados (`title`, `author`, `tags`, `doc_type`, timestamps).
+- `document`: arquivo + `delivery_process_id` (NOT NULL) + metadados (`title` opcional, `author`, `tags`, `doc_type`, timestamps).
+- `document_link`: vínculos iniciais (mesma squad), se informados.
 - `ingestion_job`: estado inicial `pending`, vínculo com `document`.
 
 ## 9. Segurança, privacidade e riscos
@@ -80,7 +84,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - ADR-0001 (stack). A ingestão em si é FEAT-INGEST-001.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack da POC.
+- ADR-0001 — stack da POC. ADR-0002 — formatos. ADR-0007 — vínculo obrigatório squad/processo e título opcional (IA sugere). ADR-0008 — vínculos iniciais entre documentos.
 
 ## 14. Pendências e questões em aberto
 - Definir limite máximo de tamanho de arquivo (tipos já fixados em ADR-0002).
@@ -88,5 +92,6 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-09 | 0.3.0 | - | Vínculo obrigatório squad/processo; `title` opcional (IA sugere); vínculos iniciais entre documentos | ADR-0007, ADR-0008 |
 | 2026-07-09 | 0.2.0 | - | Formatos de arquivo fixados; spec aprovada | ADR-0002 |
 | 2026-07-09 | 0.1.0 | - | Criação inicial da spec | ADR-0001 |

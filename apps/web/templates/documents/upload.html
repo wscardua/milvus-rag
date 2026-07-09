@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Upload · Milvus RAG{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Enviar documento</h1>
+  <p>Associe a uma squad/processo e defina os metadados. A ingestão roda em background.</p>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="tile">
+  {% csrf_token %}
+  <h3>Onde este documento se encaixa</h3>
+  <div class="row">
+    <div class="field">
+      <label>Squad <span class="req">*</span></label>
+      <select class="select" id="squad" required onchange="syncProc()">
+        <option value="">Selecione…</option>
+        {% for s in squads %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Processo de Delivery <span class="req">*</span></label>
+      <select class="select" id="proc" name="delivery_process_id" required>
+        <option value="">Selecione a squad primeiro…</option>
+      </select>
+    </div>
+  </div>
+
+  <hr style="margin:0 0 var(--s6)">
+
+  <div class="field">
+    <label>Arquivo <span class="req">*</span></label>
+    <input class="input" type="file" name="file" required
+           accept=".pdf,.docx,.txt,.md,.html,.htm,.py,.xls,.xlsx" style="background:var(--white)">
+    <div class="helper">PDF · DOCX · TXT/MD · HTML · .py · XLS/XLSX</div>
+  </div>
+
+  <div class="field">
+    <label>Título <span class="ai-hint" style="margin:0">IA sugere se vazio</span></label>
+    <input class="input" name="title" placeholder="Deixe em branco para a IA sugerir na ingestão">
+  </div>
+
+  <div class="row">
+    <div class="field"><label>Autor</label><input class="input" name="author" placeholder="Ex.: Equipe de Compliance"></div>
+    <div class="field">
+      <label>Tipo de documento</label>
+      <select class="select" name="doc_type">
+        <option value="">—</option>
+        {% for t in doc_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Tags (separadas por vírgula)</label>
+    <input class="input" name="tags" placeholder="segurança, 2026">
+  </div>
+
+  <div class="notif notif--info">
+    <div>ℹ️</div>
+    <div><strong>Título, categoria, subcategoria e resumo</strong> podem ser sugeridos pela IA na ingestão — você revisa no detalhe. Vínculos são gerenciados no detalhe do documento.</div>
+  </div>
+
+  <div class="btn-set">
+    <a class="btn btn--secondary" href="{% url 'document_list' %}">Cancelar</a>
+    <button class="btn btn--primary" type="submit">Enviar e ingerir</button>
+  </div>
+</form>
+
+{{ procs_by_squad|json_script:"procs-data" }}
+{% endblock %}
+{% block scripts %}
+<script>
+  const PROCS = JSON.parse(document.getElementById('procs-data').textContent);
+  function syncProc(){
+    const sid = document.getElementById('squad').value;
+    const proc = document.getElementById('proc');
+    const items = PROCS[sid] || [];
+    proc.innerHTML = '<option value="">Selecione…</option>' +
+      items.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  }
+</script>
+{% endblock %}

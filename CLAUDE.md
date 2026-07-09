@@ -27,7 +27,29 @@ podman compose ps                   # status + health
 podman compose down                 # parar SEM apagar dados (nunca use -v salvo p/ resetar)
 ```
 
-Milvus: `localhost:19530` (gRPC) · Postgres: `postgresql://rag:rag@localhost:5432/rag`. Detalhes e backup de volumes em [ops/README.md](ops/README.md). Comandos de `apps/api` / `apps/web` serão adicionados quando o código existir.
+Milvus: `localhost:19530` (gRPC) · Postgres: `postgresql://rag:rag@localhost:5432/rag`. Detalhes e backup de volumes em [ops/README.md](ops/README.md).
+
+```bash
+# Backend (apps/api) — venv/ compartilhado na raiz; rodar de dentro de apps/api
+source venv/bin/activate && pip install -r apps/api/requirements.txt   # 1ª vez
+cd apps/api && cp -n .env.example .env                                 # 1ª vez
+alembic upgrade head                        # aplica migrations no Postgres
+alembic revision --autogenerate -m "msg"    # nova migration a partir dos models
+python -m app.db.seed_taxonomy              # seed idempotente da taxonomia (ADR-0007)
+uvicorn app.main:app --port 8001            # sobe a API (domínio: /documents, /query, org, links)
+python -m app.worker                        # sobe o worker de ingestão (ADR-0004/0009) — precisa do LM Studio
+```
+
+LM Studio deve estar ativo em `LM_STUDIO_BASE_URL` com **embedding** (`text-embedding-embeddinggemma-300m`) e **chat** (ex.: `gemma-3-4b-it-qat`) — modelos carregam sob demanda (JIT).
+
+```bash
+# Frontend (apps/web) — Django, cliente HTTP da API (venv/ compartilhado)
+source venv/bin/activate && pip install -r apps/web/requirements.txt   # 1ª vez
+cd apps/web && cp -n .env.example .env                                 # 1ª vez (API_BASE_URL)
+python manage.py runserver 127.0.0.1:8000    # sobe a UI (API precisa estar em :8001)
+```
+
+Rodar os três juntos: API `uvicorn app.main:app --port 8001` (em `apps/api`), UI `manage.py runserver` (em `apps/web`), e — quando existir — o worker `python -m app.worker`.
 
 ## Metodologia: docs como fonte da verdade
 

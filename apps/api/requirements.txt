@@ -1,0 +1,19 @@
+# Backend FastAPI + worker — POC Milvus RAG (Python 3.10, venv/ compartilhado)
+setuptools<81  # pymilvus 2.5.x ainda usa pkg_resources (removido em setuptools>=81)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+SQLAlchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+python-multipart==0.0.20
+python-dotenv==1.0.1
+httpx==0.28.1
+openai==1.59.6
+pymilvus==2.5.4
+# extração de texto por formato (ADR-0002)
+pypdf==5.1.0
+python-docx==1.1.2
+openpyxl==3.1.5
+beautifulsoup4==4.12.3

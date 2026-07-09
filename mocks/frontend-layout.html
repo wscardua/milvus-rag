@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Milvus RAG — Mock (IBM Carbon)</title>
+<!-- IBM Plex Sans — fonte oficial do Carbon Design System -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ============ Carbon Design tokens (subset) ============ */
+  :root{
+    --black-100:#161616; --gray-100:#161616; --gray-90:#262626; --gray-80:#393939;
+    --gray-70:#525252; --gray-60:#6f6f6f; --gray-50:#8d8d8d; --gray-40:#a8a8a8;
+    --gray-30:#c6c6c6; --gray-20:#e0e0e0; --gray-10:#f4f4f4; --white:#ffffff;
+    --blue-60:#0f62fe; --blue-70:#0043ce; --blue-20:#d0e2ff;
+    --green-50:#24a148; --green-20:#a7f0ba;
+    --yellow-30:#f1c21b;
+    --red-60:#da1e28; --red-20:#ffd7d9;
+    --purple-60:#8a3ffc;
+    --teal-60:#007d79; --teal-20:#9ef0f0;
+    --focus:#0f62fe;
+    --spacing-03:0.5rem; --spacing-05:1rem; --spacing-06:1.5rem; --spacing-07:2rem;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'IBM Plex Sans',system-ui,sans-serif;
+    background:var(--gray-10);
+    color:var(--gray-100);
+    font-size:14px; line-height:1.4;
+  }
+  a{color:var(--blue-60);text-decoration:none;cursor:pointer;}
+  a:hover{text-decoration:underline;}
+
+  /* ============ UI Shell header (Carbon) ============ */
+  .shell{
+    height:48px; background:var(--black-100); color:var(--white);
+    display:flex; align-items:stretch; position:sticky; top:0; z-index:10;
+    border-bottom:1px solid var(--gray-80);
+  }
+  .shell__brand{
+    display:flex; align-items:center; padding:0 var(--spacing-05);
+    font-weight:600; letter-spacing:.02em; white-space:nowrap;
+  }
+  .shell__brand span{font-weight:400;color:var(--gray-30);margin-left:.35rem;}
+  .shell__nav{display:flex;}
+  .shell__nav a{
+    display:flex; align-items:center; padding:0 var(--spacing-05);
+    color:var(--gray-30); font-size:14px; height:48px; border:none; background:none;
+    cursor:pointer; font-family:inherit;
+  }
+  .shell__nav a:hover{background:var(--gray-90); color:var(--white); text-decoration:none;}
+  .shell__nav a.active{color:var(--white); box-shadow:inset 0 -3px 0 0 var(--blue-60);}
+  .shell__nav .sep{width:1px;background:var(--gray-80);margin:12px 0;}
+  .shell__spacer{flex:1;}
+  .shell__user{display:flex;align-items:center;padding:0 var(--spacing-05);color:var(--gray-30);}
+  .shell__avatar{width:28px;height:28px;border-radius:50%;background:var(--blue-60);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+
+  /* ============ Layout ============ */
+  .page{max-width:1056px;margin:0 auto;padding:var(--spacing-07) var(--spacing-05) 5rem;}
+  .page-header{margin-bottom:var(--spacing-06);}
+  .page-header h1{font-size:28px;font-weight:400;margin:0 0 .35rem;letter-spacing:0;}
+  .page-header p{color:var(--gray-70);margin:0;max-width:64ch;}
+  .header-flex{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;}
+  .breadcrumb{font-size:12px;color:var(--gray-70);margin-bottom:.75rem;}
+  .breadcrumb a{color:var(--gray-70);}
+
+  .hidden{display:none !important;}
+
+  /* ============ Cards / tiles ============ */
+  .tile{background:var(--white);border:1px solid var(--gray-20);padding:var(--spacing-06);margin-bottom:var(--spacing-05);}
+  .tile h2{font-size:20px;font-weight:400;margin:0 0 var(--spacing-05);}
+  .tile h3{font-size:14px;font-weight:600;margin:0 0 var(--spacing-03);color:var(--gray-80);}
+
+  /* ============ Form controls (Carbon) ============ */
+  .field{margin-bottom:var(--spacing-06);}
+  .field > label{display:block;font-size:12px;color:var(--gray-70);margin-bottom:.375rem;}
+  .req{color:var(--red-60);}
+  .field .helper{font-size:12px;color:var(--gray-60);margin-top:.375rem;}
+  .input, .select, .textarea{
+    width:100%; font-family:inherit; font-size:14px; color:var(--gray-100);
+    background:var(--gray-10); border:none; border-bottom:1px solid var(--gray-50);
+    padding:11px 16px; outline:2px solid transparent; outline-offset:-2px;
+  }
+  .input:focus,.select:focus,.textarea:focus{outline:2px solid var(--focus);background:var(--white);}
+  .textarea{min-height:88px;resize:vertical;}
+  .select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><path d='M8 11L3 6h10z' fill='%23161616'/></svg>");background-repeat:no-repeat;background-position:right 16px center;}
+  .row{display:flex;gap:var(--spacing-05);}
+  .row > .field{flex:1;}
+
+  /* file dropzone */
+  .dropzone{border:1px dashed var(--gray-50); background:var(--white); padding:var(--spacing-06); text-align:center; color:var(--gray-70);}
+  .dropzone strong{color:var(--blue-60);cursor:pointer;}
+  .dropzone .exts{font-size:12px;color:var(--gray-60);margin-top:.5rem;}
+
+  /* tags (Carbon Tag) */
+  .tags{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;}
+  .tag{display:inline-flex;align-items:center;gap:.35rem;height:24px;padding:0 .5rem;border-radius:12px;font-size:12px;background:var(--gray-20);color:var(--gray-100);white-space:nowrap;}
+  .tag--blue{background:var(--blue-20);color:var(--blue-70);}
+  .tag--teal{background:var(--teal-20);color:#005d5d;}
+  .tag--purple{background:#e8daff;color:#6929c4;}
+  .tag button{border:none;background:none;cursor:pointer;font-size:13px;line-height:1;color:inherit;padding:0;}
+  .tag-input{border:none;background:none;outline:none;font-family:inherit;font-size:12px;min-width:80px;flex:1;}
+
+  /* buttons (Carbon) */
+  .btn{display:inline-flex;align-items:center;gap:.5rem;font-family:inherit;font-size:14px;padding:11px 60px 11px 16px;border:none;cursor:pointer;min-height:48px;outline:2px solid transparent;outline-offset:-2px;white-space:nowrap;}
+  .btn:focus{outline:2px solid var(--focus);}
+  .btn--primary{background:var(--blue-60);color:#fff;}
+  .btn--primary:hover{background:var(--blue-70);}
+  .btn--secondary{background:var(--gray-80);color:#fff;}
+  .btn--secondary:hover{background:var(--gray-60);}
+  .btn--ghost{background:none;color:var(--blue-60);padding:11px 16px;}
+  .btn--ghost:hover{background:var(--gray-20);}
+  .btn--sm{min-height:32px;padding:6px 12px;}
+  .btn-set{display:flex;gap:1px;}
+
+  /* status badges */
+  .badge{display:inline-flex;align-items:center;gap:.4rem;font-size:12px;padding:.15rem .5rem;border-radius:12px;font-weight:400;}
+  .badge::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor;}
+  .badge--indexed{background:var(--green-20);color:#0e6027;}
+  .badge--processing{background:var(--blue-20);color:var(--blue-70);}
+  .badge--pending{background:var(--gray-20);color:var(--gray-70);}
+  .badge--failed{background:var(--red-20);color:#a2191f;}
+
+  /* data table (Carbon) */
+  .table-toolbar{display:flex;gap:1px;background:var(--white);border:1px solid var(--gray-20);border-bottom:none;}
+  .table-toolbar .search{flex:1;display:flex;align-items:center;padding:0 1rem;border-bottom:1px solid var(--gray-20);}
+  .table-toolbar .search input{border:none;background:none;outline:none;font-family:inherit;font-size:14px;width:100%;padding:14px 0;}
+  .table-toolbar .filter{display:flex;align-items:center;gap:.5rem;padding:0 1rem;color:var(--gray-80);cursor:pointer;border-left:1px solid var(--gray-20);border-bottom:1px solid var(--gray-20);white-space:nowrap;}
+  table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--gray-20);}
+  thead th{text-align:left;font-size:14px;font-weight:600;color:var(--gray-100);background:var(--gray-10);padding:14px 16px;border-bottom:1px solid var(--gray-20);}
+  tbody td{padding:14px 16px;border-bottom:1px solid var(--gray-20);color:var(--gray-90);vertical-align:top;}
+  tbody tr.clickable{cursor:pointer;}
+  tbody tr.clickable:hover{background:var(--gray-10);}
+  .mono{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gray-70);}
+  .sub{display:block;font-size:12px;color:var(--gray-60);margin-top:2px;}
+  .rowactions a{margin-right:.75rem;font-size:13px;}
+
+  .pagination{display:flex;justify-content:space-between;align-items:center;background:var(--white);border:1px solid var(--gray-20);border-top:none;padding:0 1rem;height:40px;font-size:12px;color:var(--gray-80);}
+  .pagination .arrows button{border:none;background:none;cursor:pointer;padding:.5rem;color:var(--gray-80);}
+
+  /* LLM suggestion hint */
+  .ai-hint{display:inline-flex;align-items:center;gap:.35rem;font-size:12px;color:var(--purple-60);margin-left:.5rem;}
+  .ai-hint::before{content:'✦';}
+  .suggested{border-left:2px solid var(--purple-60);}
+
+  /* answer + citations */
+  .answer{background:var(--white);border:1px solid var(--gray-20);border-left:3px solid var(--blue-60);padding:var(--spacing-06);}
+  .answer p{margin:0 0 .75rem;line-height:1.6;}
+  .citation{background:var(--gray-10);border:1px solid var(--gray-20);padding:var(--spacing-05);margin-bottom:.75rem;}
+  .citation__head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;font-size:12px;}
+  .citation__snippet{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--gray-80);line-height:1.6;border-left:2px solid var(--gray-40);padding-left:.75rem;}
+  .score{font-family:'IBM Plex Mono',monospace;color:var(--green-50);font-weight:500;}
+
+  /* document flow (linked docs) */
+  .flow{display:flex;flex-direction:column;gap:0;}
+  .flow__node{background:var(--gray-10);border:1px solid var(--gray-20);border-left:3px solid var(--gray-40);padding:.75rem 1rem;}
+  .flow__node--current{border-left-color:var(--blue-60);background:#edf5ff;}
+  .flow__node--obsolete{opacity:.6;border-left-color:var(--red-60);text-decoration:line-through;text-decoration-color:var(--gray-40);}
+  .flow__doc{font-size:14px;color:var(--gray-100);}
+  .flow__tag{font-size:12px;color:var(--gray-60);margin-top:2px;}
+  .flow__edge{padding:.15rem 1rem;}
+  .flow__type{font-size:11px;font-weight:600;padding:.1rem .5rem;border-radius:10px;}
+  .flow__type--esclarece{background:var(--teal-20);color:#005d5d;}
+  .flow__type--precede{background:var(--blue-20);color:var(--blue-70);}
+  .flow__type--substitui{background:var(--red-20);color:#a2191f;}
+  .flow__type--complementa{background:#e8daff;color:#6929c4;}
+
+  /* notification (Carbon inline) */
+  .notif{display:flex;gap:.75rem;padding:1rem;border-left:3px solid;margin-bottom:var(--spacing-05);font-size:14px;}
+  .notif--warning{background:#fdf6dd;border-color:var(--yellow-30);}
+  .notif--error{background:var(--red-20);border-color:var(--red-60);}
+  .notif--info{background:#edf5ff;border-color:var(--blue-60);}
+  .notif strong{display:block;margin-bottom:.15rem;}
+
+  .field-static{margin-bottom:var(--spacing-05);flex:1;}
+  .field-static label{display:block;font-size:12px;color:var(--gray-70);margin-bottom:.15rem;}
+  .field-static .val{font-size:14px;color:var(--gray-100);}
+
+  details.advanced summary{cursor:pointer;color:var(--blue-60);font-size:14px;margin:var(--spacing-05) 0;}
+  .mock-note{font-size:11px;color:var(--gray-60);text-align:center;padding:2rem 1rem;border-top:1px solid var(--gray-20);margin-top:3rem;}
+
+  /* modal (Carbon) */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:20;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--white);width:min(560px,92vw);}
+  .modal__head{padding:var(--spacing-05) var(--spacing-06);}
+  .modal__head h2{font-size:20px;font-weight:400;margin:0;}
+  .modal__body{padding:0 var(--spacing-06) var(--spacing-06);}
+  .modal__foot{display:flex;gap:1px;}
+  .modal__foot .btn{flex:1;}
+</style>
+</head>
+<body>
+
+<!-- ============ UI SHELL ============ -->
+<header class="shell">
+  <div class="shell__brand">IBM&nbsp;<span>Milvus RAG</span></div>
+  <nav class="shell__nav" id="nav">
+    <a data-page="documentos" class="active">Documentos</a>
+    <a data-page="upload">Upload</a>
+    <a data-page="consulta">Consulta</a>
+    <div class="sep"></div>
+    <a data-page="squads">Squads</a>
+    <a data-page="processos">Processos</a>
+  </nav>
+  <div class="shell__spacer"></div>
+  <div class="shell__user"><span class="shell__avatar">WS</span></div>
+</header>
+
+<!-- ============ PAGE: DOCUMENTOS (listagem) ============ -->
+<main class="page" data-view="documentos">
+  <div class="page-header">
+    <h1>Documentos</h1>
+    <p>Acervo submetido ao RAG. Cada documento pertence a um <strong>processo de delivery</strong> de uma <strong>squad</strong>. O <strong>status</strong> reflete a ingestão assíncrona (atualiza via polling).</p>
+  </div>
+
+  <div class="table-toolbar">
+    <div class="search">🔍&nbsp;<input placeholder="Buscar por título…"></div>
+    <div class="filter">Filtros: squad · processo · categoria · doc_type · status ▾</div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Título</th><th>Squad / Processo</th><th>Categoria</th><th>Status</th><th>Ingerido em</th></tr>
+    </thead>
+    <tbody>
+      <tr class="clickable" onclick="go('detalhe')">
+        <td>Política de Segurança da Informação 2026<span class="sub">Documento técnico · <span class="tag" style="height:18px">segurança</span></span></td>
+        <td>Squad Pagamentos<span class="sub">Antifraude</span></td>
+        <td>Segurança &amp; Compliance <span class="ai-hint">IA</span></td>
+        <td><span class="badge badge--indexed">indexed</span></td>
+        <td class="mono">2026-07-09 14:22</td>
+      </tr>
+      <tr class="clickable" onclick="go('detalhe')">
+        <td>Contrato de Prestação de Serviços — ACME<span class="sub">Contrato / Documento legal</span></td>
+        <td>Squad Pagamentos<span class="sub">Conciliação</span></td>
+        <td>Governança &amp; Negócio <span class="ai-hint">IA</span></td>
+        <td><span class="badge badge--processing">processing</span></td>
+        <td class="mono">—</td>
+      </tr>
+      <tr class="clickable" onclick="go('detalhe')">
+        <td>Transcrição — Planning Sprint 14<span class="sub">Transcrição de reunião</span></td>
+        <td>Squad Onboarding<span class="sub">KYC Digital</span></td>
+        <td>Gestão &amp; Processos Ágeis <span class="ai-hint">IA</span></td>
+        <td><span class="badge badge--pending">pending</span></td>
+        <td class="mono">—</td>
+      </tr>
+      <tr class="clickable" onclick="go('detalhe')">
+        <td>arquitetura_sistema.md<span class="sub">Documento técnico</span></td>
+        <td>Squad Plataforma<span class="sub">Observabilidade</span></td>
+        <td>Arquitetura &amp; Engenharia <span class="ai-hint">IA</span></td>
+        <td><span class="badge badge--failed">failed</span></td>
+        <td class="mono">2026-07-09 13:58</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="pagination">
+    <span>1–4 de 4 itens</span>
+    <div class="arrows"><button>‹</button> Página 1 de 1 <button>›</button></div>
+  </div>
+</main>
+
+<!-- ============ PAGE: UPLOAD ============ -->
+<main class="page hidden" data-view="upload">
+  <div class="page-header">
+    <h1>Enviar documento</h1>
+    <p>Faça upload, associe a uma squad/processo e defina os metadados. A ingestão (chunking, embeddings, indexação) roda em background.</p>
+  </div>
+  <div class="tile">
+    <h3>Onde este documento se encaixa</h3>
+    <div class="row">
+      <div class="field">
+        <label>Squad <span class="req">*</span></label>
+        <select class="select" id="up-squad" onchange="syncProc('up-squad','up-proc')">
+          <option value="">Selecione…</option>
+          <option>Squad Pagamentos</option><option>Squad Onboarding</option><option>Squad Plataforma</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Processo de Delivery <span class="req">*</span></label>
+        <select class="select" id="up-proc"><option value="">Selecione a squad primeiro…</option></select>
+        <div class="helper">Processos são cadastrados na área <a onclick="go('processos')">Processos</a>.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Vincular a documentos (opcional) <span class="ai-hint" style="margin:0">mesma squad</span></label>
+      <div class="row">
+        <select class="select" style="max-width:220px"><option>esclarece</option><option>complementa</option><option>precede</option><option>substitui</option></select>
+        <select class="select"><option value="">Documento da squad…</option><option>Contrato de Prestação de Serviços — ACME</option><option>Fluxo de Onboarding de Cliente</option></select>
+        <button class="btn btn--ghost btn--sm" style="min-height:auto">＋ Adicionar</button>
+      </div>
+      <div class="helper">Vínculos direcionados e tipados; podem ser editados depois no detalhe. Só documentos da mesma squad.</div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--gray-20);margin:0 0 var(--spacing-06)">
+
+    <div class="field">
+      <label>Arquivo <span class="req">*</span></label>
+      <div class="dropzone">
+        Arraste o arquivo aqui ou <strong>procure no computador</strong>
+        <div class="exts">PDF · DOCX · TXT/MD · HTML · .py · XLS/XLSX</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Título <span class="ai-hint" style="margin:0">IA sugere se vazio</span></label>
+      <input class="input" placeholder="Deixe em branco para a IA sugerir na ingestão">
+      <div class="helper">Opcional. Se vazio, a IA sugere um título (fallback: nome do arquivo) e você edita no detalhe.</div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Autor</label>
+        <input class="input" placeholder="Ex.: Equipe de Compliance">
+      </div>
+      <div class="field">
+        <label>Tipo de documento (doc_type)</label>
+        <select class="select">
+          <option>Documento técnico</option><option>Manual / Guia</option><option>Procedimento / Runbook</option>
+          <option>Especificação / Requisito</option><option>Ata / Registro de reunião</option><option>Transcrição de reunião</option>
+          <option>Base de Conhecimento</option><option>Apresentação</option><option>Planilha</option><option>Contrato / Documento legal</option>
+          <option>Código-fonte</option><option>Relatório</option><option>Outro</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Tags</label>
+      <div class="tags input" style="background:var(--gray-10);padding:8px 12px;">
+        <span class="tag">segurança <button>×</button></span>
+        <span class="tag">2026 <button>×</button></span>
+        <input class="tag-input" placeholder="adicionar tag + Enter">
+      </div>
+    </div>
+
+    <div class="notif notif--info">
+      <div>ℹ️</div>
+      <div><strong>Título, categoria, subcategoria e resumo</strong> podem ser sugeridos pela IA durante a ingestão — você revisa e edita no detalhe do documento.</div>
+    </div>
+
+    <div class="btn-set">
+      <button class="btn btn--secondary">Cancelar</button>
+      <button class="btn btn--primary" onclick="go('detalhe')">Enviar e ingerir</button>
+    </div>
+  </div>
+</main>
+
+<!-- ============ PAGE: DETALHE ============ -->
+<main class="page hidden" data-view="detalhe">
+  <div class="breadcrumb"><a onclick="go('documentos')">Documentos</a> / <a onclick="go('squads')">Squad Pagamentos</a> / <a onclick="go('processos')">Antifraude</a> / Política de Segurança da Informação 2026</div>
+  <div class="page-header header-flex">
+    <div>
+      <h1>Política de Segurança da Informação 2026</h1>
+      <p><span class="badge badge--indexed">indexed</span> &nbsp; Ingerido em <span class="mono">2026-07-09 14:22</span></p>
+    </div>
+  </div>
+
+  <div class="tile">
+    <h3>Vínculo e metadados do usuário</h3>
+    <div class="row">
+      <div class="field-static"><label>Squad</label><div class="val"><span class="tag tag--teal">Squad Pagamentos</span></div></div>
+      <div class="field-static"><label>Processo de Delivery</label><div class="val"><span class="tag tag--blue">Antifraude</span></div></div>
+    </div>
+    <div class="row">
+      <div class="field-static"><label>Autor</label><div class="val">Equipe de Compliance</div></div>
+      <div class="field-static"><label>doc_type</label><div class="val">manual</div></div>
+      <div class="field-static"><label>Tags</label><div class="val"><span class="tag">segurança</span></div></div>
+    </div>
+  </div>
+
+  <div class="tile">
+    <h2>Título, classificação &amp; resumo <span class="ai-hint">sugerido pela IA — edite se necessário</span></h2>
+    <div class="field">
+      <label>Título</label>
+      <input class="input suggested" value="Política de Segurança da Informação 2026">
+      <div class="helper">Sugerido pela IA a partir do conteúdo (fallback: nome do arquivo). Editável.</div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Categoria (enum)</label>
+        <select class="select suggested" id="cat" onchange="syncSub('cat','subcat')">
+          <option>Produto &amp; Discovery</option><option>Arquitetura &amp; Engenharia</option><option>Qualidade &amp; Testes</option>
+          <option>Operações &amp; Infra</option><option selected>Segurança &amp; Compliance</option><option>Gestão &amp; Processos Ágeis</option>
+          <option>Governança &amp; Negócio</option>
+        </select>
+        <div class="helper">Sugerida: <strong>Segurança &amp; Compliance</strong> (taxonomia fixa)</div>
+      </div>
+      <div class="field">
+        <label>Subcategoria (enum)</label>
+        <select class="select suggested" id="subcat">
+          <option>Segurança da Informação</option><option>LGPD / Privacidade</option><option>Auditoria</option><option>Gestão de Acessos</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Resumo</label>
+      <textarea class="textarea suggested">Documento define diretrizes de segurança da informação para 2026: controle de acesso, classificação de dados, resposta a incidentes e responsabilidades por área. Aplica-se a todos os colaboradores e fornecedores.</textarea>
+      <div class="helper">Gerado pela IA a partir do conteúdo. Conteúdo submetido é entrada não confiável — revise antes de publicar.</div>
+    </div>
+    <div class="btn-set">
+      <button class="btn btn--ghost">Descartar alterações</button>
+      <button class="btn btn--primary">Salvar overrides</button>
+    </div>
+  </div>
+
+  <div class="tile">
+    <h2>Fluxo de documentos vinculados</h2>
+    <p style="color:var(--gray-70);margin:0 0 var(--spacing-05)">Vínculos direcionados e tipados (mesma squad). A busca segue este fluxo para trazer esclarecimentos que estão em outros documentos.</p>
+
+    <div class="flow">
+      <div class="flow__node flow__node--current">
+        <div class="flow__doc">Política de Segurança da Informação 2026</div>
+        <div class="flow__tag">documento atual</div>
+      </div>
+      <div class="flow__edge"><span class="flow__type flow__type--esclarece">esclarecido por ↓</span></div>
+      <div class="flow__node">
+        <div class="flow__doc"><a onclick="go('detalhe')">Glossário de Termos de Segurança</a></div>
+        <div class="flow__tag">esclarece · <span class="mono">expande na busca</span></div>
+      </div>
+      <div class="flow__edge"><span class="flow__type flow__type--precede">precede ↓</span></div>
+      <div class="flow__node">
+        <div class="flow__doc"><a onclick="go('detalhe')">Plano de Resposta a Incidentes 2026</a></div>
+        <div class="flow__tag">próximo no fluxo · <span class="mono">expande na busca</span></div>
+      </div>
+      <div class="flow__edge"><span class="flow__type flow__type--substitui">substitui ↓</span></div>
+      <div class="flow__node flow__node--obsolete">
+        <div class="flow__doc">Política de Segurança 2024 <span class="tag" style="height:18px;background:var(--red-20);color:#a2191f">obsoleto</span></div>
+        <div class="flow__tag">substituído · <span class="mono">excluído da busca</span></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:var(--spacing-06);align-items:flex-end">
+      <div class="field" style="margin:0;max-width:200px"><label>Tipo</label>
+        <select class="select"><option>esclarece</option><option>complementa</option><option>precede</option><option>substitui</option></select></div>
+      <div class="field" style="margin:0"><label>Documento (mesma squad)</label>
+        <select class="select"><option value="">Selecione…</option><option>Contrato de Prestação de Serviços — ACME</option></select></div>
+      <button class="btn btn--ghost btn--sm">＋ Adicionar vínculo</button>
+    </div>
+  </div>
+
+  <div class="tile" style="opacity:.9">
+    <h3>Exemplo de estado: falha na ingestão</h3>
+    <div class="notif notif--error">
+      <div>⚠️</div>
+      <div><strong>failed</strong> — Não foi possível extrair texto do arquivo (formato corrompido). Reenvie o documento.</div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ PAGE: CONSULTA ============ -->
+<main class="page hidden" data-view="consulta">
+  <div class="page-header">
+    <h1>Consultar acervo</h1>
+    <p>Pergunte em linguagem natural. A resposta é <strong>sempre ancorada</strong> em trechos reais dos documentos (grounding).</p>
+  </div>
+
+  <div class="tile">
+    <div class="field">
+      <label>Pergunta <span class="req">*</span></label>
+      <textarea class="textarea" placeholder="Ex.: Qual a política de resposta a incidentes de segurança?"></textarea>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Squad (filtro opcional)</label>
+        <select class="select" id="q-squad" onchange="syncProc('q-squad','q-proc')">
+          <option value="">Todas</option>
+          <option>Squad Pagamentos</option><option>Squad Onboarding</option><option>Squad Plataforma</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Processo (filtro opcional)</label>
+        <select class="select" id="q-proc"><option value="">Todos</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Categoria (filtro opcional)</label>
+        <select class="select"><option>Todas</option><option>Produto &amp; Discovery</option><option>Arquitetura &amp; Engenharia</option><option>Qualidade &amp; Testes</option><option>Operações &amp; Infra</option><option>Segurança &amp; Compliance</option><option>Gestão &amp; Processos Ágeis</option><option>Governança &amp; Negócio</option></select>
+      </div>
+      <div class="field">
+        <label>doc_type (filtro opcional)</label>
+        <select class="select"><option>Todos</option><option>Documento técnico</option><option>Base de Conhecimento</option><option>Ata / Registro de reunião</option><option>Transcrição de reunião</option><option>Contrato / Documento legal</option><option>Planilha</option></select>
+      </div>
+    </div>
+    <details class="advanced">
+      <summary>Opções avançadas</summary>
+      <div class="field" style="max-width:200px">
+        <label>top_k (trechos recuperados)</label>
+        <input class="input" type="number" value="5">
+      </div>
+    </details>
+    <button class="btn btn--primary">Perguntar</button>
+  </div>
+
+  <h3 style="font-weight:400;font-size:16px;margin:var(--spacing-06) 0 var(--spacing-05);">Resposta</h3>
+  <div class="answer">
+    <p>A política de resposta a incidentes exige a notificação imediata da equipe de segurança, contenção do incidente em até 1 hora e registro formal no sistema de tickets. Incidentes críticos acionam o comitê de crise.</p>
+    <div style="font-size:12px;color:var(--gray-70);margin-top:.5rem;">Baseado em 2 trechos de 1 documento · Squad Pagamentos.</div>
+  </div>
+
+  <h3 style="font-weight:600;font-size:14px;margin:var(--spacing-06) 0 var(--spacing-03);">Citações</h3>
+  <div class="citation">
+    <div class="citation__head">
+      <a onclick="go('detalhe')">📄 Política de Segurança da Informação 2026 · chunk #42</a>
+      <span class="score">score 0.89</span>
+    </div>
+    <div class="citation__snippet">"…Todo incidente deve ser notificado à equipe de segurança imediatamente. A contenção deve ocorrer em até 1 (uma) hora após a detecção…"</div>
+  </div>
+  <div class="citation">
+    <div class="citation__head">
+      <a onclick="go('detalhe')">📄 Política de Segurança da Informação 2026 · chunk #43</a>
+      <span class="score">score 0.81</span>
+    </div>
+    <div class="citation__snippet">"…Incidentes classificados como críticos acionam o comitê de crise e exigem registro formal no sistema de tickets…"</div>
+  </div>
+
+  <h3 style="font-weight:600;font-size:14px;margin:var(--spacing-06) 0 var(--spacing-03);">Fluxo de documentos relacionados <span class="ai-hint" style="margin:0">seguido na busca</span></h3>
+  <div class="notif notif--info" style="border-color:var(--teal-60);background:#d9fbfb">
+    <div>🔗</div>
+    <div>
+      A resposta considerou documentos vinculados ao trecho citado:
+      <div style="margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center">
+        <a onclick="go('detalhe')">Política de Segurança 2026</a>
+        <span class="flow__type flow__type--esclarece">esclarecido por</span>
+        <a onclick="go('detalhe')">Glossário de Termos de Segurança</a>
+        <span class="flow__type flow__type--precede">precede</span>
+        <a onclick="go('detalhe')">Plano de Resposta a Incidentes 2026</a>
+      </div>
+      <div style="font-size:12px;color:var(--gray-70);margin-top:.5rem">A versão substituída (Política 2024) foi <strong>excluída</strong> do contexto.</div>
+    </div>
+  </div>
+
+  <h3 style="font-weight:400;font-size:16px;margin:var(--spacing-07) 0 var(--spacing-05);">Exemplo de estado: sem contexto suficiente</h3>
+  <div class="notif notif--warning">
+    <div>⚠️</div>
+    <div><strong>Sem contexto suficiente</strong> — Nenhum trecho relevante acima do limiar de similaridade foi encontrado no acervo. Nenhuma resposta foi gerada para não induzir a erro (a API não alucina).</div>
+  </div>
+</main>
+
+<!-- ============ PAGE: SQUADS (admin) ============ -->
+<main class="page hidden" data-view="squads">
+  <div class="page-header header-flex">
+    <div>
+      <h1>Squads</h1>
+      <p>Times de delivery. Cada squad agrupa seus processos de delivery e, por eles, seus documentos.</p>
+    </div>
+    <button class="btn btn--primary btn--sm" onclick="openModal('modal-squad')">＋ Nova squad</button>
+  </div>
+  <table>
+    <thead><tr><th>Nome</th><th>Descrição</th><th>Processos</th><th>Documentos</th><th>Ações</th></tr></thead>
+    <tbody>
+      <tr><td>Squad Pagamentos</td><td>Meios de pagamento e antifraude</td><td>3</td><td>18</td><td class="rowactions"><a onclick="openModal('modal-squad')">Editar</a><a style="color:var(--red-60)">Excluir</a></td></tr>
+      <tr><td>Squad Onboarding</td><td>Cadastro e KYC de novos clientes</td><td>2</td><td>9</td><td class="rowactions"><a onclick="openModal('modal-squad')">Editar</a><a style="color:var(--red-60)">Excluir</a></td></tr>
+      <tr><td>Squad Plataforma</td><td>Infra, observabilidade e CI/CD</td><td>3</td><td>24</td><td class="rowactions"><a onclick="openModal('modal-squad')">Editar</a><a style="color:var(--red-60)">Excluir</a></td></tr>
+    </tbody>
+  </table>
+</main>
+
+<!-- ============ PAGE: PROCESSOS (admin) ============ -->
+<main class="page hidden" data-view="processos">
+  <div class="page-header header-flex">
+    <div>
+      <h1>Processos de Delivery</h1>
+      <p>Entregas de uma squad. Cada documento é associado a um processo no upload.</p>
+    </div>
+    <button class="btn btn--primary btn--sm" onclick="openModal('modal-proc')">＋ Novo processo</button>
+  </div>
+  <div class="table-toolbar">
+    <div class="search">🔍&nbsp;<input placeholder="Buscar processo…"></div>
+    <div class="filter">Filtrar por squad ▾</div>
+  </div>
+  <table>
+    <thead><tr><th>Processo</th><th>Squad</th><th>Descrição</th><th>Documentos</th><th>Ações</th></tr></thead>
+    <tbody>
+      <tr><td>Antifraude</td><td><span class="tag tag--teal">Squad Pagamentos</span></td><td>Regras e modelos de detecção de fraude</td><td>7</td><td class="rowactions"><a onclick="openModal('modal-proc')">Editar</a><a style="color:var(--red-60)">Excluir</a></td></tr>
+      <tr><td>Conciliação</td><td><span class="tag tag--teal">Squad Pagamentos</span></td><td>Fechamento e conciliação financeira</td><td>6</td><td class="rowactions"><a onclick="openModal('modal-proc')">Editar</a><a style="color:var(--red-60)">Excluir</a></td></tr>
+      <tr><td>KYC Digital</td><td><span class="tag tag--teal">Squad Onboarding</span></td><td>Verificação de identidade digital</td><td>5</td><td class="rowactions"><a onclick="openModal('modal-proc')">Editar</a><a style="color:var(--red-60)">Excluir</a></td></tr>
+      <tr><td>Observabilidade</td><td><span class="tag tag--teal">Squad Plataforma</span></td><td>Métricas, logs e tracing</td><td>9</td><td class="rowactions"><a onclick="openModal('modal-proc')">Editar</a><a style="color:var(--red-60)">Excluir</a></td></tr>
+    </tbody>
+  </table>
+</main>
+
+<!-- ============ MODAIS (Carbon) ============ -->
+<div class="overlay" id="modal-squad">
+  <div class="modal">
+    <div class="modal__head"><h2>Nova squad</h2></div>
+    <div class="modal__body">
+      <div class="field"><label>Nome <span class="req">*</span></label><input class="input" placeholder="Ex.: Squad Pagamentos"></div>
+      <div class="field"><label>Descrição</label><textarea class="textarea" placeholder="Responsabilidade da squad…"></textarea></div>
+    </div>
+    <div class="modal__foot">
+      <button class="btn btn--secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn--primary" onclick="closeModal()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-proc">
+  <div class="modal">
+    <div class="modal__head"><h2>Novo processo de delivery</h2></div>
+    <div class="modal__body">
+      <div class="field"><label>Squad <span class="req">*</span></label>
+        <select class="select"><option>Squad Pagamentos</option><option>Squad Onboarding</option><option>Squad Plataforma</option></select></div>
+      <div class="field"><label>Nome <span class="req">*</span></label><input class="input" placeholder="Ex.: Antifraude"></div>
+      <div class="field"><label>Descrição</label><textarea class="textarea" placeholder="Objetivo da entrega…"></textarea></div>
+    </div>
+    <div class="modal__foot">
+      <button class="btn btn--secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn--primary" onclick="closeModal()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="mock-note">
+  Mock estático · IBM Carbon Design System (IBM Plex Sans, tokens Carbon) · Milvus RAG POC — FEAT-WEB-001 (frontend-layout)<br>
+  Modelo: Squad ──&lt; Processo de Delivery ──&lt; Documento · Sem lógica de app (dados fictícios, navegação de demonstração).
+</div>
+
+<script>
+  const nav = document.getElementById('nav');
+  function go(page){
+    document.querySelectorAll('main[data-view]').forEach(m=>m.classList.toggle('hidden', m.dataset.view!==page));
+    document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active', a.dataset.page===page));
+    window.scrollTo(0,0);
+  }
+  nav.addEventListener('click', e=>{ if(e.target.dataset.page) go(e.target.dataset.page); });
+
+  function openModal(id){document.getElementById(id).classList.add('open');}
+  function closeModal(){document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open'));}
+  document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeModal();}));
+
+  // squad -> processos (dependente)
+  const PROC = {
+    'Squad Pagamentos':['Antifraude','Conciliação','Checkout v2'],
+    'Squad Onboarding':['KYC Digital','Abertura de Conta'],
+    'Squad Plataforma':['Observabilidade','CI/CD','Data Platform']
+  };
+  function syncProc(squadId, procId){
+    const squad=document.getElementById(squadId).value, proc=document.getElementById(procId);
+    const isFilter = procId.startsWith('q-');
+    const base = isFilter ? '<option value="">Todos</option>' : '<option value="">Selecione…</option>';
+    proc.innerHTML = base + (PROC[squad]||[]).map(p=>`<option>${p}</option>`).join('');
+  }
+
+  // categoria -> subcategoria (enum dependente)
+  const SUB = {
+    'Produto & Discovery':['Visão de Produto','Requisitos / User Stories','Pesquisa / Discovery','Roadmap'],
+    'Arquitetura & Engenharia':['Arquitetura de Solução','ADR / Decisão Técnica','APIs & Integrações','Modelo de Dados'],
+    'Qualidade & Testes':['Estratégia de Testes','Casos de Teste','Critérios de Aceite','Relatório de Bugs'],
+    'Operações & Infra':['CI/CD','Observabilidade','Runbook / Operação','Infraestrutura'],
+    'Segurança & Compliance':['Segurança da Informação','LGPD / Privacidade','Auditoria','Gestão de Acessos'],
+    'Gestão & Processos Ágeis':['Planning','Daily','Review / Demo','Retrospectiva','Refinement','Métricas & Indicadores'],
+    'Governança & Negócio':['Contratos','SLA / Acordos','Financeiro','Políticas Internas']
+  };
+  function syncSub(catId, subId){
+    const cat=document.getElementById(catId).value, sub=document.getElementById(subId);
+    sub.innerHTML=(SUB[cat]||[]).map(s=>`<option>${s}</option>`).join('');
+  }
+</script>
+</body>
+</html>

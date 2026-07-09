@@ -17,7 +17,9 @@ Estes valores são **contrato**: mudá-los exige novo ADR + **reindexação** de
 - `id` — chave primária.
 - `vector` — embedding `float[768]`.
 - `chunk_id` — referência ao chunk no Postgres (rastreabilidade/citação).
-- payload de metadados filtráveis (`doc_type`, `tags`, `author`, `document_id`).
+- payload de metadados filtráveis: `document_id`, `doc_type`, `tags`, `author` e, por ADR-0007, `squad_id`, `delivery_process_id`, `category`, `subcategory` (denormalizados na indexação para filtro de retrieval por squad/processo/categoria).
+
+> ADR-0007 amplia **apenas o payload de metadados filtráveis** — modelo/dimensão/métrica (contrato do índice, ADR-0002) permanecem imutáveis; não há reindexação por conta desta mudança.
 
 ## Regras
 
