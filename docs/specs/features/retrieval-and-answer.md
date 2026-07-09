@@ -1,7 +1,7 @@
 ---
 id: FEAT-QUERY-001
 title: Consulta e Resposta com Citações
-version: 0.5.0
+version: 0.6.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
@@ -9,7 +9,7 @@ created: 2026-07-09
 updated: 2026-07-09
 contracts: [query-and-citations]
 depends_on: [FEAT-INGEST-001]
-adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008, ADR-0011]
+adrs: [ADR-0001, ADR-0002, ADR-0005, ADR-0007, ADR-0008, ADR-0011]
 ---
 
 # Feature — Consulta e Resposta com Citações
@@ -29,6 +29,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - Sinalização de "sem contexto suficiente".
 - **Auditoria da consulta (ADR-0011):** toda `/query` é gravada no `query_log` com métricas (scores, modelos, params de chunking, latência); a resposta traz `query_id`.
 - **Feedback 👍/👎** da resposta (`POST /query/{query_id}/feedback`) para avaliar qualidade e azeitar modelo/chunk.
+- **Retrieval puro (`POST /retrieve`, ADR-0005):** endpoint dedicado que devolve só os trechos relevantes + score, **sem geração**, sem expansão por vínculos e sem gravar `query_log`. Reusa o mesmo retrieval de `/query`; consumido pela tool `retrieve_chunks` do MCP (FEAT-MCP-001).
 ### Fora de escopo
 - Conversa multi-turno com memória (fora da POC).
 - Expansão multi-salto (transitiva) de vínculos — só 1 salto na POC (ADR-0008).
@@ -101,6 +102,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-09 | 0.6.0 | - | Endpoint `POST /retrieve` (retrieval puro, sem geração) para o MCP; reusa o retrieval de `/query` sem gravar `query_log` | WORK-004, ADR-0005 |
 | 2026-07-09 | 0.5.0 | - | `query_log` (toda consulta + métricas de tuning) e feedback 👍/👎; `query_id` na resposta | WORK-003, ADR-0011 |
 | 2026-07-09 | 0.4.0 | - | Filtros por squad/processo; expansão de retrieval por vínculos (1 salto, `substitui` excluído) + `linked_flow[]` na resposta | ADR-0007, ADR-0008 |
 | 2026-07-09 | 0.3.0 | - | Embedding da pergunta via `embeddinggemma-300m` (LM Studio) | ADR-0002 (rev.) |

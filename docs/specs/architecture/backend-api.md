@@ -34,6 +34,7 @@ Nada de endpoint/credencial/modelo hardcoded. Um `Settings` (Pydantic `BaseSetti
 - `GET /documents/{id}/file` — arquivo original (inline/attachment; ADR-0010).
 - `DELETE /documents/{id}` — exclusão em cascade + Milvus + arquivo (ADR-0010).
 - `POST /query` — pergunta → resposta + citações + `query_id`.
+- `POST /retrieve` — retrieval puro (sem geração): apenas trechos relevantes + score. Consumido pela tool `retrieve_chunks` do MCP (ADR-0005); não grava `query_log`.
 - `POST /query/{query_id}/feedback` — 👍/👎 da resposta (ADR-0011).
 - `GET /health` — saúde por serviço (Postgres/Milvus/LM Studio/worker) + fila (ADR-0011).
 - `GET /logs` — eventos do `system_log` com filtros (ADR-0011).

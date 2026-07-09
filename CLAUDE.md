@@ -52,6 +52,15 @@ python manage.py runserver 127.0.0.1:8000    # sobe a UI (API precisa estar em :
 Rodar os três juntos: API `uvicorn app.main:app --port 8001` (em `apps/api`), UI `manage.py runserver` (em `apps/web`), e — quando existir — o worker `python -m app.worker`.
 
 ```bash
+# Servidor MCP (apps/mcp) — cliente HTTP da API (ADR-0005); venv/ compartilhado
+source venv/bin/activate && pip install -r apps/mcp/requirements.txt   # 1ª vez (fixa mcp/starlette compatíveis com o FastAPI)
+cd apps/mcp && cp -n .env.example .env                                 # 1ª vez (API_BASE_URL=http://localhost:8001)
+python -m app.server                                                   # sobe o MCP (stdio): search_documents/retrieve_chunks/list_documents/get_document
+```
+
+O MCP consome a API (`POST /query`, `POST /retrieve`, `GET /documents[...]`) — a API precisa estar em `:8001`. Transporte `stdio` por default (`MCP_TRANSPORT`).
+
+```bash
 # Testes (apps/api) — integração via FastAPI TestClient contra o stack real (Postgres/Milvus/LM Studio)
 source venv/bin/activate && cd apps/api && pytest   # precisa da infra up + org/taxonomia seedada; testes de /query pulam se o LM Studio estiver fora
 ```

@@ -36,3 +36,23 @@ class QueryResponse(BaseModel):
 
 class FeedbackRequest(BaseModel):
     rating: Literal["up", "down"]  # 👍 / 👎
+
+
+# --- Retrieval puro (sem geração) — FEAT-MCP-001 / ADR-0005 ---
+class RetrieveRequest(BaseModel):
+    question: str
+    filters: dict | None = None  # mesmos filtros de /query
+    top_k: int | None = None
+
+
+class RetrievedChunk(BaseModel):
+    document_id: str
+    chunk_id: str
+    ordinal: int
+    text: str
+    score: float
+
+
+class RetrieveResponse(BaseModel):
+    insufficient_context: bool
+    chunks: list[RetrievedChunk]

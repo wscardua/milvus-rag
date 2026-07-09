@@ -1,9 +1,9 @@
 ---
 id: FEAT-MCP-001
 title: Servidor MCP de Consulta ao Acervo
-version: 0.1.0
+version: 0.2.0
 status_spec: aprovada
-status_impl: nao_iniciada
+status_impl: implementada
 owner: -
 created: 2026-07-09
 updated: 2026-07-09
@@ -43,7 +43,7 @@ Além da UI Django, agentes precisam consultar os documentos salvos de forma pro
 - `search_documents(question, filters?, top_k?)` → resposta + citações (via `POST /query`).
 - `list_documents(filters?)` → acervo por categoria/metadado (via `GET /documents`).
 - `get_document(id)` → metadados e estado de um documento (via `GET /documents/{id}`).
-- `retrieve_chunks(question, top_k?)` → apenas trechos relevantes, sem geração.
+- `retrieve_chunks(question, filters?, top_k?)` → apenas trechos relevantes, sem geração (via `POST /retrieve`).
 ### Fluxos alternativos e de erro
 - API indisponível → erro claro ao agente (não inventar resposta).
 - Sem resultados no filtro → indicar acervo vazio para o recorte.
@@ -54,8 +54,9 @@ Além da UI Django, agentes precisam consultar os documentos salvos de forma pro
 - Contratos reusados: `query-and-citations`, `upload-and-metadata`.
 
 ## 7. Contratos e integrações
-- Consome `POST /query`, `GET /documents`, `GET /documents/{id}`.
-- Depende do `base_url` da API (configurável por ambiente).
+- Consome `POST /query`, `POST /retrieve`, `GET /documents`, `GET /documents/{id}`.
+- Depende do `API_BASE_URL` da API (configurável por ambiente; dev local `http://localhost:8001`).
+- Implementação em `apps/mcp/app/`: `server.py` (FastMCP/stdio), `client.py` (HTTP + tradução de filtros), `config.py`.
 
 ## 8. Dados e persistência
 - Nenhuma persistência própria; estado vive na API/Postgres/Milvus.
@@ -65,9 +66,10 @@ Além da UI Django, agentes precisam consultar os documentos salvos de forma pro
 - Respostas podem conter PII dos documentos; citações permitem auditoria da origem.
 
 ## 10. Critérios de aceite
-- [ ] `search_documents` retorna resposta com citações para uma pergunta com acervo indexado.
-- [ ] `list_documents`/`get_document` refletem os documentos e filtros por categoria.
-- [ ] Com a API fora do ar, a tool retorna erro explícito (sem alucinar).
+- [x] `search_documents` retorna resposta com citações para uma pergunta com acervo indexado.
+- [x] `list_documents`/`get_document` refletem os documentos e filtros por categoria.
+- [x] Com a API fora do ar, a tool retorna erro explícito (sem alucinar).
+- [x] `retrieve_chunks` devolve trechos + score sem geração (via `POST /retrieve`).
 
 ## 11. Testes esperados
 - **Unitário:** mapeamento tool → chamada HTTP; tradução de filtros.
@@ -84,10 +86,12 @@ Além da UI Django, agentes precisam consultar os documentos salvos de forma pro
 - ADR-0005 — MCP como cliente HTTP da API.
 
 ## 14. Pendências e questões em aberto
-- Definir transporte padrão de produção (stdio vs HTTP/SSE) e política de auth futura.
-- Decidir se `retrieve_chunks` exige um endpoint dedicado na API ou reusa `POST /query` com flag.
+- ~~Definir transporte padrão~~ → **resolvido (WORK-004): `stdio` como default; HTTP/Streamable fica como evolução (POC local, sem auth).**
+- ~~Decidir se `retrieve_chunks` reusa `POST /query` com flag~~ → **resolvido (WORK-004): endpoint dedicado `POST /retrieve`, sem geração — evita acoplar dois contratos (ADR-0005, refinamento).**
+- Política de auth por agente e transporte de produção (HTTP/Streamable) seguem como evolução futura.
 
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-09 | 0.2.0 | - | Implementação: `apps/mcp/` (FastMCP/stdio, 4 tools) + endpoint `POST /retrieve` na API. Pendências §14 resolvidas (transporte stdio; `retrieve_chunks` via endpoint dedicado) | WORK-004, ADR-0005 |
 | 2026-07-09 | 0.1.0 | - | Criação da spec do servidor MCP de consulta | ADR-0005 |
