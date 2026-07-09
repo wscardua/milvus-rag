@@ -45,10 +45,55 @@ def _metrics(started: float, hits: list[dict]) -> dict:
     }
 
 
-def answer_query(session: Session, question: str, filters: dict | None, top_k: int) -> dict:
-    started = time.monotonic()
+def _search(session: Session, question: str, filters: dict | None, top_k: int):
+    """Embedding da pergunta + busca vetorial + carga dos chunks base.
+
+    Base compartilhada por `answer_query` (com geração) e `retrieve_chunks` (sem geração).
+    Retorna (hits, chunks_por_milvus_id).
+    """
     qvec = embeddings.embed_query(question)
     hits = vectorstore.search(qvec, top_k, _map_filters(filters))
+    hit_ids = [h["chunk_id"] for h in hits]
+    chunks = {
+        c.milvus_vector_id: c
+        for c in session.scalars(select(Chunk).where(Chunk.milvus_vector_id.in_(hit_ids)))
+    }
+    return hits, chunks
+
+
+def retrieve_chunks(session: Session, question: str, filters: dict | None, top_k: int) -> dict:
+    """Retrieval puro — trechos relevantes SEM geração (FEAT-MCP-001, ADR-0005).
+
+    Primitivo para agentes montarem o próprio prompt. Não faz expansão por vínculos
+    (ADR-0008) nem chama o LLM; aplica o mesmo limiar de "sem contexto suficiente".
+    """
+    started = time.monotonic()
+    hits, chunks = _search(session, question, filters, top_k)
+    insufficient = not hits or hits[0]["score"] < settings.retrieval_min_score
+
+    result_chunks = []
+    for h in hits:
+        c = chunks.get(h["chunk_id"])
+        if c is not None:
+            result_chunks.append(
+                {
+                    "document_id": str(c.document_id),
+                    "chunk_id": str(c.id),
+                    "ordinal": c.ordinal,
+                    "text": c.text,
+                    "score": round(float(h["score"]), 4),
+                }
+            )
+    return {
+        "insufficient_context": insufficient,
+        "chunks": result_chunks,
+        "metrics": _metrics(started, hits),
+    }
+
+
+def answer_query(session: Session, question: str, filters: dict | None, top_k: int) -> dict:
+    started = time.monotonic()
+    hits, chunks = _search(session, question, filters, top_k)
 
     if not hits or hits[0]["score"] < settings.retrieval_min_score:
         return {
@@ -59,12 +104,6 @@ def answer_query(session: Session, question: str, filters: dict | None, top_k: i
             "metrics": _metrics(started, hits),
         }
 
-    # chunks base (via milvus_vector_id = chunk_id)
-    hit_ids = [h["chunk_id"] for h in hits]
-    chunks = {
-        c.milvus_vector_id: c
-        for c in session.scalars(select(Chunk).where(Chunk.milvus_vector_id.in_(hit_ids)))
-    }
     retrieved_doc_ids = {uuid.UUID(h["document_id"]) for h in hits if h.get("document_id")}
 
     # expansão de 1 salto (ADR-0008)

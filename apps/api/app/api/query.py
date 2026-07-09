@@ -11,7 +11,13 @@ from app.config import settings
 from app.db.base import get_session
 from app.db.models import FEEDBACK_RATINGS, QueryLog
 from app.domain.retrieval import retriever
-from app.schemas.query import FeedbackRequest, QueryRequest, QueryResponse
+from app.schemas.query import (
+    FeedbackRequest,
+    QueryRequest,
+    QueryResponse,
+    RetrieveRequest,
+    RetrieveResponse,
+)
 from app.services import eventlog
 
 router = APIRouter(tags=["query"])
@@ -44,6 +50,25 @@ def query(payload: QueryRequest, session: Session = Depends(get_session)):
     session.refresh(log)
 
     return {"query_id": str(log.id), **result}
+
+
+@router.post("/retrieve", response_model=RetrieveResponse)
+def retrieve(payload: RetrieveRequest, session: Session = Depends(get_session)):
+    """Retrieval puro (sem geração) — trechos relevantes para o agente montar o prompt.
+
+    Endpoint dedicado (ADR-0005/FEAT-MCP-001): não gera resposta nem grava `query_log`
+    (não há feedback a ancorar). Consumido pela tool `retrieve_chunks` do MCP.
+    """
+    if not payload.question.strip():
+        raise HTTPException(422, "Pergunta vazia.")
+    top_k = payload.top_k or settings.retrieval_top_k
+    try:
+        result = retriever.retrieve_chunks(session, payload.question, payload.filters, top_k)
+    except Exception as exc:  # noqa: BLE001 — falha de índice/modelo → erro claro
+        eventlog.log_event("ERROR", "retrieval", "retrieve_failed", str(exc))
+        raise HTTPException(502, f"Falha no retrieval: {exc}")
+    result.pop("metrics", None)
+    return result
 
 
 @router.post("/query/{query_id}/feedback", status_code=204)

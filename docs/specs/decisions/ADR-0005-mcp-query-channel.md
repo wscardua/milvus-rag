@@ -11,9 +11,15 @@ Além da UI Django, os documentos vetorizados/categorizados devem ser consultáv
 - **Tools expostas** (aproveitando a categorização — `doc_type`/`tags`):
   - `search_documents(question, filters?, top_k?)` → resposta + citações;
   - `list_documents(filters?)` e `get_document(id)` → navegar o acervo por categoria/metadado;
-  - `retrieve_chunks(question, top_k?)` → apenas trechos relevantes (sem geração), para o agente montar seu próprio prompt.
+  - `retrieve_chunks(question, filters?, top_k?)` → apenas trechos relevantes (sem geração), para o agente montar seu próprio prompt.
 - **Transporte:** stdio por padrão (integração local com agentes); HTTP/SSE configurável.
 - **Auth:** POC local sem autenticação; controle de acesso fica como evolução futura.
+
+### Refinamento (WORK-004, implementação)
+
+- **`retrieve_chunks` usa um endpoint dedicado `POST /retrieve`** na API (retrieval sem geração), **não** uma flag no `POST /query`. Motivo: `/query` gera resposta + citações + grava `query_log`; `/retrieve` só devolve trechos. Uma flag acoplaria dois comportamentos e dois shapes de resposta no mesmo contrato — o endpoint dedicado mantém cada um coeso. Expõe o retrieval que já existe em `domain/retrieval` (sem duplicar lógica). Ver contrato `query-and-citations` (seção "Retrieval puro").
+- **`API_BASE_URL` default `http://localhost:8001`** no dev local (a API roda na 8001; a UI Django na 8000).
+- **Transporte confirmado: `stdio`** como default; HTTP/Streamable fica como evolução (POC local, restrita à rede local, sem auth).
 
 ## Impacto
 
