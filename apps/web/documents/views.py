@@ -1,10 +1,16 @@
 """Telas de Documentos: listagem, upload e detalhe (consomem upload-and-metadata + document-links)."""
 from __future__ import annotations
 
+import httpx
+from django.conf import settings
 from django.contrib import messages
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 
 from core import client
+
+# Formatos que o navegador renderiza inline no modal; o resto é só download (ADR-0010).
+PREVIEWABLE_EXTS = ("pdf", "txt", "md", "html", "htm")
 
 
 def document_list(request):
@@ -116,6 +122,10 @@ def document_detail(request, document_id):
             elif action == "remove_link":
                 client.delete(f"/documents/{document_id}/links/{request.POST['link_id']}")
                 messages.success(request, "Vínculo removido.")
+            elif action == "delete_document":
+                client.delete(f"/documents/{document_id}")
+                messages.success(request, "Documento excluído (chunks e vetores removidos).")
+                return redirect("document_list")
         except client.ApiError as exc:
             messages.error(request, str(exc.detail))
         return redirect("document_detail", document_id=document_id)
@@ -140,6 +150,8 @@ def document_detail(request, document_id):
     doc["process_name"] = next(
         (p["name"] for p in processes if p["id"] == doc.get("delivery_process_id")), "—"
     )
+    ext = (doc.get("original_filename") or "").lower().rsplit(".", 1)[-1]
+    doc["previewable"] = ext in PREVIEWABLE_EXTS
     for c in candidates:
         c["label"] = c.get("title") or c.get("original_filename") or c["id"]
 
@@ -164,3 +176,28 @@ def document_detail(request, document_id):
             "nav": "documentos",
         },
     )
+
+
+def document_file(request, document_id):
+    """Proxy do arquivo servido pela API (guardrail: o browser só conhece o Django).
+
+    `?download=1` força attachment; caso contrário, inline para o modal de visualização.
+    """
+    download = request.GET.get("download") == "1"
+    url = settings.API_BASE_URL.rstrip("/") + f"/documents/{document_id}/file"
+    try:
+        upstream = httpx.get(url, params={"download": "true"} if download else None, timeout=60)
+    except httpx.RequestError as exc:
+        raise Http404(f"API indisponível ({exc}).")
+    if upstream.status_code == 404:
+        raise Http404("Arquivo não encontrado.")
+    if upstream.status_code >= 400:
+        # repassa a falha em vez de servir o corpo de erro como se fosse o arquivo
+        raise Http404("Falha ao obter o arquivo do documento.")
+    resp = HttpResponse(
+        upstream.content,
+        content_type=upstream.headers.get("content-type", "application/octet-stream"),
+    )
+    if "content-disposition" in upstream.headers:
+        resp["Content-Disposition"] = upstream.headers["content-disposition"]
+    return resp

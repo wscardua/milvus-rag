@@ -4,7 +4,7 @@
 
 | Camada | Local | Responsabilidade |
 |---|---|---|
-| Web (Django) | `apps/web/` | Upload, metadados, listagem, consulta, admin. Cliente da API. |
+| Web (Django) | `apps/web/` | Upload, metadados, listagem, consulta (+feedback), exclusão/visualização/download de documentos, admin, **Logs & Saúde**. Cliente da API. |
 | MCP (servidor) | `apps/mcp/` | Consulta ao acervo para outros agentes. Cliente HTTP da API (ADR-0005). |
 | API/Domínio (FastAPI) | `apps/api/` | Ingestão, chunking, embeddings, retrieval, geração com citações. Fonte da verdade. |
 | Worker (ingestão) | `apps/api/` (`app/worker.py`) | Daemon assíncrono que consome a fila `ingestion_job` (ADR-0004). |
@@ -34,7 +34,7 @@ MCP     ─┼→ API POST /query (FastAPI)
 
 ## Fronteiras (guardrails)
 
-- Django e MCP são clientes — não fazem chunking/embeddings/retrieval.
+- Django e MCP são clientes — não fazem chunking/embeddings/retrieval, nem leem Postgres/Milvus/arquivos direto (acesso a arquivo e logs é via API; Django faz proxy — ADR-0010/0011).
 - A API é a única fonte de retrieval/geração; o worker é a única fonte de ingestão.
-- Cada vetor no Milvus referencia um chunk rastreável no Postgres.
+- Cada vetor no Milvus referencia um chunk rastreável no Postgres. **Excluir um documento remove seus chunks e vetores** (sem órfãos — ADR-0010).
 - Modelo/dimensão/métrica de embeddings são contrato do índice (mudança = ADR + reindexação).

@@ -22,3 +22,13 @@ def save_upload(file_obj, original_filename: str) -> tuple[str, int]:
     with open(dest, "wb") as out:
         shutil.copyfileobj(file_obj, out)
     return str(dest), dest.stat().st_size
+
+
+def delete_file(path: str | None) -> None:
+    """Remove o arquivo do disco; tolerante a caminho vazio ou já ausente."""
+    if not path:
+        return
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass

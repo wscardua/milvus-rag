@@ -1,7 +1,8 @@
-"""Tela de Consulta (consome query-and-citations). Shell tolerante enquanto /query não existe."""
+"""Tela de Consulta (consome query-and-citations) + feedback 👍/👎 da resposta."""
 from __future__ import annotations
 
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import render
 
 from core import client
@@ -46,3 +47,18 @@ def consulta(request):
             "nav": "consulta",
         },
     )
+
+
+def query_feedback(request):
+    """Proxy do 'joinha' para a API (POST /query/{id}/feedback). Chamado via fetch."""
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "método inválido"}, status=405)
+    query_id = request.POST.get("query_id")
+    rating = request.POST.get("rating")
+    if not query_id or rating not in ("up", "down"):
+        return JsonResponse({"ok": False, "error": "parâmetros inválidos"}, status=400)
+    try:
+        client.post(f"/query/{query_id}/feedback", json={"rating": rating})
+    except client.ApiError as exc:
+        return JsonResponse({"ok": False, "error": str(exc.detail)}, status=exc.status or 502)
+    return JsonResponse({"ok": True})

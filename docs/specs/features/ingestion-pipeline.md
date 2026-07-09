@@ -1,7 +1,7 @@
 ---
 id: FEAT-INGEST-001
 title: Pipeline de Ingestão
-version: 0.7.0
+version: 0.8.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
@@ -9,7 +9,7 @@ created: 2026-07-09
 updated: 2026-07-09
 contracts: [upload-and-metadata]
 depends_on: [FEAT-UPLOAD-001]
-adrs: [ADR-0001, ADR-0002, ADR-0004, ADR-0007, ADR-0009]
+adrs: [ADR-0001, ADR-0002, ADR-0004, ADR-0007, ADR-0009, ADR-0010, ADR-0011]
 ---
 
 # Feature — Pipeline de Ingestão
@@ -94,7 +94,7 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 - Parsers por formato; `pymilvus`; cliente OpenAI-compatível (LM Studio); LM Studio com o modelo de embedding carregado.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack. ADR-0002 — embeddings locais, formatos e runtime do Milvus. ADR-0004 — worker daemon assíncrono. ADR-0007 — organização Squad/Processo e classificação. ADR-0009 — retry, visibility timeout e recuperação de jobs presos.
+- ADR-0001 — stack. ADR-0002 — embeddings locais, formatos e runtime do Milvus. ADR-0004 — worker daemon assíncrono. ADR-0007 — organização Squad/Processo e classificação. ADR-0009 — retry, visibility timeout e recuperação de jobs presos. ADR-0010 — exclusão remove chunks + vetores (mesmo mecanismo idempotente `delete_by_document`). ADR-0011 — worker emite eventos no `system_log` (`worker_started`/`worker_heartbeat`/`job_indexed`/`job_retry`/`job_failed`).
 
 ## 14. Pendências e questões em aberto
 - Calibrar tamanho/overlap de chunking por família de formato (default definido; ajuste após avaliação de retrieval).
@@ -103,6 +103,7 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-09 | 0.8.0 | - | Exclusão de documento remove chunks + vetores (`delete_by_document`); worker emite eventos no `system_log` (start/heartbeat/indexed/retry/failed) | WORK-003, ADR-0010, ADR-0011 |
 | 2026-07-09 | 0.7.0 | - | Política de retry/backoff, visibility timeout e recuperação de jobs presos; campos `attempts`/`started_at`/`heartbeat_at`/`available_at` | ADR-0009 |
 | 2026-07-09 | 0.6.0 | - | IA também sugere `title` (quando vazio no upload) | ADR-0007 |
 | 2026-07-09 | 0.5.0 | - | Passo de classificação por IA: sugere categoria/subcategoria (taxonomia) + resumo, editável pelo usuário; payload Milvus com squad/processo/categoria; `ingested_at` | ADR-0007 |

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Logs & Saúde · Milvus RAG{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Logs &amp; Saúde do sistema</h1>
+  <p>Estado dos serviços/daemons e eventos do sistema persistidos no Postgres (troubleshooting e tuning).</p>
+</div>
+
+<div class="tile">
+  <h2>Saúde dos serviços</h2>
+  {% if health %}
+    <p><strong>Status geral:</strong>
+      <span class="badge {% if health.status == 'ok' %}badge--indexed{% else %}badge--failed{% endif %}">{{ health.status }}</span></p>
+    <div class="health-grid">
+      {% for c in health.components %}
+        <div class="health-card">
+          <span class="badge {% if c.ok %}badge--indexed{% else %}badge--failed{% endif %}">{% if c.ok %}up{% else %}down{% endif %}</span>
+          <div class="health-card__name">{{ c.name }}</div>
+          <div class="health-card__detail">{{ c.detail }}</div>
+        </div>
+      {% endfor %}
+    </div>
+    <h3 style="margin-top:var(--s6)">Fila de ingestão</h3>
+    <div class="health-grid">
+      {% for state, count in health.queue.items %}
+        <div class="health-card"><span class="badge badge--{{ state }}">{{ state }}</span><div class="health-card__name">{{ count }}</div></div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="sub" style="display:block">Saúde indisponível (API fora do ar?).</p>
+  {% endif %}
+</div>
+
+<div class="tile">
+  <h2>Eventos</h2>
+  <form method="get" class="row" style="align-items:flex-end;margin-bottom:var(--s5)">
+    <div class="field" style="margin:0;max-width:160px"><label>Nível</label>
+      <select class="select" name="level">
+        <option value="">Todos</option>
+        {% for lv in levels %}<option value="{{ lv }}" {% if filters.level == lv %}selected{% endif %}>{{ lv }}</option>{% endfor %}
+      </select></div>
+    <div class="field" style="margin:0;max-width:180px"><label>Componente</label>
+      <select class="select" name="component">
+        <option value="">Todos</option>
+        {% for cp in components %}<option value="{{ cp }}" {% if filters.component == cp %}selected{% endif %}>{{ cp }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn--secondary btn--sm" type="submit">Filtrar</button>
+    <a class="btn btn--ghost btn--sm" href="{% url 'logs' %}">Limpar</a>
+  </form>
+
+  <table class="table">
+    <thead><tr><th>Quando</th><th>Nível</th><th>Componente</th><th>Evento</th><th>Mensagem</th></tr></thead>
+    <tbody>
+      {% for lg in logs %}
+        <tr>
+          <td class="mono">{{ lg.ts|slice:":19" }}</td>
+          <td><span class="badge badge--log-{{ lg.level|lower }}">{{ lg.level }}</span></td>
+          <td>{{ lg.component }}</td>
+          <td class="mono">{{ lg.event }}</td>
+          <td>{{ lg.message|default:"—" }}{% if lg.document_id %}<br><span class="sub" style="display:inline">doc {{ lg.document_id|slice:':8' }}</span>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="sub">Nenhum evento.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

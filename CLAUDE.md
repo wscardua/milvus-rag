@@ -51,6 +51,11 @@ python manage.py runserver 127.0.0.1:8000    # sobe a UI (API precisa estar em :
 
 Rodar os três juntos: API `uvicorn app.main:app --port 8001` (em `apps/api`), UI `manage.py runserver` (em `apps/web`), e — quando existir — o worker `python -m app.worker`.
 
+```bash
+# Testes (apps/api) — integração via FastAPI TestClient contra o stack real (Postgres/Milvus/LM Studio)
+source venv/bin/activate && cd apps/api && pytest   # precisa da infra up + org/taxonomia seedada; testes de /query pulam se o LM Studio estiver fora
+```
+
 ## Metodologia: docs como fonte da verdade
 
 O desenvolvimento é **guiado por specs**, não pelo histórico da conversa. Antes de implementar, leia `docs/specs/` e conduza pelas skills `milvus-rag-*`.

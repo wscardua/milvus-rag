@@ -1,15 +1,15 @@
 ---
 id: FEAT-WEB-001
 title: Layout do Frontend (UI Django)
-version: 0.3.0
-status_spec: rascunho
+version: 0.4.0
+status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
 updated: 2026-07-09
-contracts: [upload-and-metadata, query-and-citations, organization-admin, document-links]
+contracts: [upload-and-metadata, query-and-citations, organization-admin, document-links, logs-and-health]
 depends_on: [FEAT-UPLOAD-001, FEAT-INGEST-001, FEAT-QUERY-001]
-adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008]
+adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008, ADR-0010, ADR-0011]
 ---
 
 # Feature — Layout do Frontend (UI Django)
@@ -17,7 +17,7 @@ adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008]
 > **Referência visual:** mock estático em [mocks/frontend-layout.html](../../../mocks/frontend-layout.html) (IBM Carbon Design System).
 
 ## 1. Visão geral
-Define o layout e as telas da UI Django (cliente da API FastAPI): shell de navegação e seis telas — Documentos, Upload, Detalhe, Consulta, e a administração de Squads e Processos de Delivery. Entrega a jornada completa da POC como experiência coesa, no design system da IBM Cloud (Carbon), sem mover regra crítica para a UI.
+Define o layout e as telas da UI Django (cliente da API FastAPI): shell de navegação e sete telas — Documentos, Upload, Detalhe, Consulta, administração de Squads e Processos de Delivery, e **Logs & Saúde**. Entrega a jornada completa da POC como experiência coesa, no design system da IBM Cloud (Carbon), sem mover regra crítica para a UI.
 
 ## 2. Contexto e problema
 As specs de domínio (upload, ingestão, consulta) existem, mas não há camada de apresentação. Além disso, o negócio introduziu uma organização por **Squad → Processo de Delivery → Documento** e metadados classificatórios sugeridos por IA (categoria/subcategoria/resumo) que o usuário pode revisar. Esta feature materializa essas telas e serve de referência visual e de fluxo para a implementação.
@@ -27,10 +27,11 @@ As specs de domínio (upload, ingestão, consulta) existem, mas não há camada 
 - **Shell/layout base:** header de navegação (Carbon UI Shell), área de mensagens/notificações, identidade visual IBM Plex + tokens Carbon.
 - **Tela Documentos (listagem):** tabela com título, squad/processo, categoria (sugerida por IA), `status` (badge), data de ingestão; filtros por squad, processo, categoria, `doc_type`, `status`; paginação. Atualização de `status` por **polling** de `GET /documents`.
 - **Tela Upload:** seleção obrigatória de **Squad** e **Processo de Delivery** (selects dependentes); arquivo; `title` **opcional** (IA sugere); `author`, `doc_type`, `tags`; **vínculos iniciais opcionais** a documentos da mesma squad (tipo + alvo).
-- **Tela Detalhe:** vínculo (squad/processo) + metadados do usuário; bloco **Título, classificação & resumo** com `title`, `category`/`subcategory` (selects de enum dependentes) e `summary` — **pré-preenchidos com a sugestão da IA e editáveis** (salvar overrides); **seção "Fluxo de documentos vinculados"** (adicionar/remover vínculos tipados da mesma squad; `substitui` marcado como excluído da busca); exibição de `error` quando `failed`.
-- **Tela Consulta:** pergunta, filtros **opcionais** por squad/processo/categoria/`doc_type`, `top_k` (avançado, default 5); exibição da resposta com **citações** (snippet, documento, score), o **fluxo de documentos relacionados** (`linked_flow[]`) e o estado "sem contexto suficiente".
+- **Tela Detalhe:** vínculo (squad/processo) + metadados do usuário; bloco **Título, classificação & resumo** com `title`, `category`/`subcategory` (selects de enum dependentes) e `summary` — **pré-preenchidos com a sugestão da IA e editáveis** (salvar overrides); **seção "Fluxo de documentos vinculados"** (adicionar/remover vínculos tipados da mesma squad; `substitui` marcado como excluído da busca); exibição de `error` quando `failed`. **Ações do documento (ADR-0010):** **Visualizar** (modal com `<iframe>` para PDF/TXT/MD/HTML), **Baixar** (arquivo original) e **Excluir** (com confirmação — remove chunks/vetores/arquivo).
+- **Tela Consulta:** pergunta, filtros **opcionais** por squad/processo/categoria/`doc_type`, `top_k` (avançado, default 5); exibição da resposta com **citações** (snippet, documento, score), o **fluxo de documentos relacionados** (`linked_flow[]`) e o estado "sem contexto suficiente". **Feedback 👍/👎 (ADR-0011)** da resposta (via fetch; opcional).
 - **Admin Squads:** CRUD de squads (nome, descrição).
 - **Admin Processos de Delivery:** CRUD de processos vinculados a uma squad.
+- **Tela Logs & Saúde (ADR-0011):** painel de saúde por serviço (Postgres/Milvus/LM Studio/worker) + fila de ingestão por estado; tabela de eventos do `system_log` com filtros por nível/componente. Consome `GET /health` e `GET /logs` (contrato `logs-and-health`).
 
 ### Fora de escopo
 - Chunking, embeddings, retrieval, geração (domínio FastAPI / worker).
@@ -71,6 +72,9 @@ As specs de domínio (upload, ingestão, consulta) existem, mas não há camada 
 - **`query-and-citations`** (estendido, ADR-0007/0008): `filters` incluindo `squad`/`delivery_process`; resposta com `linked_flow[]`.
 - **`organization-admin`** (novo, ADR-0007): CRUD de `squad` e `delivery_process`; leitura de taxonomia para popular os selects dependentes.
 - **`document-links`** (novo, ADR-0008): criar/listar/remover vínculos tipados (validação de mesma squad).
+- **`upload-and-metadata`** (estendido, ADR-0010): `GET /documents/{id}/file` (visualizar/baixar via proxy Django) e `DELETE /documents/{id}` (excluir).
+- **`query-and-citations`** (estendido, ADR-0011): `query_id` na resposta e `POST /query/{query_id}/feedback` (proxy Django via fetch).
+- **`logs-and-health`** (novo, ADR-0011): `GET /health` (saúde por serviço + fila) e `GET /logs` (eventos com filtros).
 
 ## 8. Dados e persistência
 Modelo (a formalizar no ADR de schema — ver §13):
@@ -103,13 +107,16 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 - UI não expõe endpoints internos nem acessa Milvus/Postgres direto.
 
 ## 10. Critérios de aceite
-- [ ] Layout base (Carbon) e navegação entre as 6 telas funcionam.
-- [ ] Upload exige squad + processo (dependentes) e valida tipo/tamanho antes de enviar.
-- [ ] Listagem mostra squad/processo, categoria (marcada como sugerida por IA) e `status` atualizando por polling.
-- [ ] Detalhe permite editar `title`/`category`/`subcategory`/`summary` pré-preenchidos pela IA e salvar overrides.
-- [ ] Detalhe/Upload permitem adicionar/remover vínculos tipados apenas a documentos da mesma squad; `substitui` é exibido como excluído da busca.
-- [ ] Consulta aplica filtros opcionais de squad/processo, exibe citações e o **fluxo de documentos relacionados** (`linked_flow[]`), além do estado "sem contexto suficiente".
-- [ ] Admin permite CRUD de squads e processos; exclusão com documentos vinculados é bloqueada.
+- [x] Layout base (Carbon) e navegação entre as 7 telas funcionam.
+- [x] Upload exige squad + processo (dependentes) e valida tipo/tamanho antes de enviar.
+- [x] Listagem mostra squad/processo, categoria (marcada como sugerida por IA) e `status` atualizando por polling.
+- [x] Detalhe permite editar `title`/`category`/`subcategory`/`summary` pré-preenchidos pela IA e salvar overrides.
+- [x] Detalhe/Upload permitem adicionar/remover vínculos tipados apenas a documentos da mesma squad; `substitui` é exibido como excluído da busca.
+- [x] Consulta aplica filtros opcionais de squad/processo, exibe citações e o **fluxo de documentos relacionados** (`linked_flow[]`), além do estado "sem contexto suficiente".
+- [x] Admin permite CRUD de squads e processos; exclusão com documentos vinculados é bloqueada.
+- [x] Detalhe permite **Visualizar** (modal, tipos previewáveis), **Baixar** e **Excluir** o documento (ADR-0010).
+- [x] Consulta permite dar **👍/👎** na resposta, registrado via API (ADR-0011).
+- [x] Tela **Logs & Saúde** mostra o estado dos serviços e os eventos do `system_log` com filtros (ADR-0011).
 
 ## 11. Testes esperados
 - **Unitário:** validação de formulários (obrigatoriedade de squad/processo, tipo/arquivo); dependência dos selects (squad→processo, categoria→subcategoria).
@@ -129,6 +136,8 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 - ADR-0001 (stack), ADR-0002 (embeddings/LLM), ADR-0003 (estrutura de diretórios).
 - **ADR-0007** (aceito): organização `squad`/`delivery_process`, taxonomia, extensão de `document` (título/classificação/resumo/`ingested_at`) e payload Milvus.
 - **ADR-0008** (aceito): vínculos entre documentos (`document_link`, fluxo tipado, mesma squad) e expansão de retrieval de 1 salto + `linked_flow[]`.
+- **ADR-0010** (aceito): exclusão de documento e acesso ao arquivo (Visualizar/Baixar/Excluir no Detalhe; proxy do arquivo).
+- **ADR-0011** (aceito): feedback 👍/👎 na Consulta e tela Logs & Saúde (contrato `logs-and-health`).
 
 ## 14. Pendências e questões em aberto
 - Taxonomia (categorias/subcategorias) e enum de `doc_type` definidos em [reference/taxonomy.md](../reference/taxonomy.md) — os selects consomem essa lista.
@@ -139,6 +148,7 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-09 | 0.4.0 | - | 7ª tela (Logs & Saúde); Detalhe ganha Visualizar/Baixar/Excluir; feedback 👍/👎 na Consulta; contrato `logs-and-health`. Spec aprovada | WORK-003, ADR-0010, ADR-0011 |
 | 2026-07-09 | 0.3.0 | - | Título opcional/sugerido pela IA (editável); vínculos entre documentos no Detalhe/Upload; fluxo (`linked_flow[]`) na Consulta; contrato `document-links` | ADR-0007, ADR-0008 |
 | 2026-07-09 | 0.2.0 | - | ADR-0007 aceito e propagado (schema, arquitetura, contratos); contrato `organization-admin` referenciado; dependências resolvidas | ADR-0007 |
 | 2026-07-09 | 0.1.0 | - | Criação inicial da spec (6 telas Carbon; modelo Squad→Processo→Documento; classificação IA editável). Mock em `mocks/frontend-layout.html` | WORK-002 |

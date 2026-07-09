@@ -8,6 +8,7 @@ Memória operacional única e enxuta. Substitui a máquina completa de workflow-
 |---|---|---|---|---|
 | WORK-001 | todas | Infra up; `apps/api/` com camada de dados (SQLAlchemy + Alembic) criada e migrada | Esqueleto FastAPI (`main.py`, routers, schemas, services) | aberto |
 | WORK-002 | FEAT-WEB-001 | **POC RAG funcional ponta a ponta**: dados + API (org/upload/links/query) + worker (ingestão/classificação/retry) + frontend Django. Testado com LM Studio real (embedding + chat): upload→ingestão→classificação IA→retrieval→resposta com citações→expansão por vínculos→"sem contexto suficiente" | Refino/robustez: heartbeat periódico no worker, avaliação de retrieval, testes automatizados; FEAT-MCP-001 (servidor MCP) | aberto |
+| WORK-003 | FEAT-UPLOAD-001, FEAT-INGEST-001, FEAT-QUERY-001, FEAT-WEB-001 | **Implementado** (`update/processo-e-logs`): (1) exclusão de documento (cascade + Milvus + arquivo), (2) visualizar (modal)/baixar documento, (3) feedback 👍/👎 + `query_log` com métricas, (4) tela Logs & Saúde + `system_log` + `/health` por serviço. ADR-0010/0011, contratos e specs propagados; migration aplicada; smoke test OK; **suíte pytest (12 testes) verde** | `/enviar-pr` (revisar e mergear) | aberto |
 
 > Status possíveis: `aberto`, `bloqueado`, `concluido`, `cancelado`, `substituido`.
 
@@ -15,14 +16,18 @@ Memória operacional única e enxuta. Substitui a máquina completa de workflow-
 
 | Feature | status_spec | status_impl |
 |---|---|---|
-| FEAT-UPLOAD-001 | aprovada (v0.3.0) | implementada |
-| FEAT-INGEST-001 | aprovada (v0.7.0) | implementada |
-| FEAT-QUERY-001 | aprovada (v0.4.0) | implementada |
+| FEAT-UPLOAD-001 | aprovada (v0.4.0) | implementada |
+| FEAT-INGEST-001 | aprovada (v0.8.0) | implementada |
+| FEAT-QUERY-001 | aprovada (v0.5.0) | implementada |
 | FEAT-MCP-001 | aprovada (v0.1.0) | nao_iniciada |
-| FEAT-WEB-001 | rascunho (v0.3.0) | implementada |
+| FEAT-WEB-001 | aprovada (v0.4.0) | implementada |
 
 ## Changelog
 
+- 2026-07-09 — **WORK-003 implementado** (`update/processo-e-logs`): 4 itens. **(1) Exclusão** — `DELETE /documents/{id}` (Milvus→Postgres cascade chunk/job/link→arquivo) + botão no Detalhe. **(2) Arquivo** — `GET /documents/{id}/file` (inline/attachment, RFC 5987) + modal Visualizar (PDF/TXT/MD/HTML) e Baixar, via proxy Django. **(3) Feedback** — `query_log` grava **toda** consulta com métricas (scores, modelos, chunk params, latency); `POST /query` devolve `query_id`; `POST /query/{id}/feedback` (👍/👎) + botões na Consulta. **(4) Logs & Saúde** — `system_log` (API+worker via `eventlog.log_event`); `/health` por serviço (PG/Milvus/LM Studio/worker) + fila; `/logs` com filtros; nova tela Django (7ª) + heartbeat leve no worker. **ADR-0010** (ciclo de vida do documento) e **ADR-0011** (observabilidade) criados; contratos `upload-and-metadata`/`query-and-citations` estendidos + novo `logs-and-health`; `database.md`/`vector-index.md`/`backend-api.md`/`system-overview.md` propagados; bumps FEAT-UPLOAD→0.4.0, INGEST→0.8.0, QUERY→0.5.0, WEB→0.4.0 (aprovada). Migration `cc34b9227367` aplicada. **Smoke test** (API+proxy): delete cascade, file inline/attachment, query_log+feedback (204/422/404), /health, /logs, document_deleted — OK.
+- 2026-07-09 — **WORK-003 — review (PR #5)**: 2 correções antes do merge. (1) Proxy de arquivo (Django) passou a **repassar falhas** da API (status ≥400 → 404) em vez de servir o corpo de erro como se fosse o arquivo (HTTP 200 corrompido). (2) `/health` do Milvus agora usa `vectorstore.ping()` (somente-leitura, **não cria** a coleção) em vez de `_c()` — health check deixou de ter efeito colateral e passa a sinalizar "coleção ausente". Achados não críticos registrados nas Lacunas (worker "down" em ingestão longa; proxy bufferiza arquivo; `/health` chama LM Studio a cada poll; `since` de `/logs` naive).
+- 2026-07-09 — **WORK-003 — testes**: primeira suíte automatizada do repo. `pytest` adicionado (`apps/api/requirements.txt`); `apps/api/tests/` com integração via FastAPI TestClient contra o stack real — ciclo de vida do documento (file inline/attachment, 404, delete cascade chunk/job, reexclusão 404), query_log+feedback (query_id, métricas, rating 204/422/404, pergunta vazia 422) e observabilidade (/health por componente + fila, /logs com filtros level/component). **12 passed.** Comando documentado no CLAUDE.md.
+- 2026-07-09 — **WORK-003 aberto**: início de `update/processo-e-logs` (tipo `update`) — melhorias de **processo** e **logs**. Branch criado a partir de `origin/main` (`e5c62db`).
 - 2026-07-09 — **PR**: consolidação da POC RAG no branch `feature/frontend-layout` — specs (ADR-0007/0008/0009, contratos, taxonomia, arquitetura), `apps/api` (FastAPI + worker) e `apps/web` (Django). Abre via `/enviar-pr`.
 - 2026-07-09 — **Implementação (núcleo RAG — worker + `/query`)**: services `lmstudio`/`embeddings`/`llm`/`vectorstore` (Milvus 768/COSINE/HNSW); `domain/ingestion` (extração PDF/DOCX/HTML/XLSX/txt-md-py, chunking por palavras, classificação IA restrita à taxonomia, pipeline idempotente); `app/worker.py` (claim SKIP LOCKED + retry/backoff + visibility timeout — ADR-0009); `domain/retrieval` + `POST /query` (busca vetorial c/ filtros + expansão de 1 salto por vínculos + geração com citações + `linked_flow` + limiar "sem contexto suficiente"). **Testado com LM Studio real** (`text-embedding-embeddinggemma-300m` + `gemma-3-4b-it-qat`): upload→indexação→classificação (título/categoria/resumo via IA)→consulta com resposta ancorada e citação; expansão trouxe definição de doc vinculado; pergunta fora do acervo → insufficient_context. Consulta Django renderiza resposta/citações/fluxo. FEAT-UPLOAD/INGEST/QUERY/WEB → status_impl `implementada`. (setuptools pinado <81 p/ pymilvus.)
 - 2026-07-09 — **Implementação (Frontend Django)**: criado `apps/web/` (Django 5.1, cliente HTTP da API — sessão/mensagens por cookie, sem banco de domínio, guardrail respeitado). Cliente `core/client.py`; views `organization` (Squads/Processos CRUD), `documents` (listagem c/ filtros, upload multipart, detalhe c/ edição de classificação + selects dependentes + vínculos/fluxo), `query` (shell tolerante ao `/query` ausente). Layout Carbon (`static/css/app.css`, `templates/base.html` + 6 páginas). API ganhou `/doc-types` e `/link-types`. Testado ponta a ponta pela UI (squad→processo→upload→listagem→detalhe→PATCH override; consulta sinaliza `/query` indisponível). Comandos em CLAUDE.md.
@@ -47,14 +52,14 @@ Memória operacional única e enxuta. Substitui a máquina completa de workflow-
 ## Lacunas conhecidas
 
 - Calibrar tamanho/overlap de chunking por família de formato (default definido; ajustar após avaliação de retrieval) — FEAT-INGEST-001.
-- Calibrar limiar de similaridade COSINE para "sem contexto suficiente" — FEAT-QUERY-001.
+- Calibrar limiar de similaridade COSINE para "sem contexto suficiente" — FEAT-QUERY-001 (o `query_log` agora fornece scores/rating/latency para essa calibração).
 - Definir limite máximo de tamanho de upload — FEAT-UPLOAD-001.
-- Decidir se `query_log` entra na POC (auditoria/avaliação) — FEAT-QUERY-001.
-- Estrutura de código (`apps/web/`, `apps/api/`, `ops/`) ainda não criada.
+- ~~Decidir se `query_log` entra na POC~~ → **resolvido (ADR-0011, WORK-003): entra, gravando toda consulta com métricas + feedback.**
+- **`system_log` sem retenção/rotação** — a tabela cresce indefinidamente; definir política de expurgo/limite (WORK-003, ADR-0011).
 - Definir o **prompt de classificação/resumo** que restringe a saída da IA à taxonomia (`reference/taxonomy.md`) — FEAT-INGEST-001.
 - Detalhar payloads/erros dos contratos estendidos na implementação (`organization-admin`, `PATCH` de overrides).
 - **Achados de review (PR #4) — follow-ups não críticos (POC):**
-  - Worker: heartbeat não é renovado durante o processamento (só no claim); doc que leve > `WORKER_VISIBILITY_TIMEOUT` pode ser reivindicado em paralelo. Implementar heartbeat periódico (thread/tick). Pipeline é idempotente, então o risco é retrabalho, não corrupção.
+  - Worker: heartbeat do **job** (`ingestion_job.heartbeat_at`) ainda não é renovado durante o processamento (só no claim); doc que leve > `WORKER_VISIBILITY_TIMEOUT` pode ser reivindicado em paralelo. Implementar renovação periódica (thread/tick). Pipeline é idempotente → risco é retrabalho, não corrupção. (WORK-003 adicionou `worker_heartbeat` no `system_log` para liveness do daemon no `/health`, mas **não** renova o heartbeat do job — segue aberto.)
   - Upload via API com `links[]` inválidos: `IntegrityError`/`ValidationError` no commit não são tratados → 500 + arquivo órfão em `data/uploads/`. Envolver em try/except e limpar o arquivo. (A UI não envia `links` no upload.)
   - Embeddings enviados num único lote; documentos muito grandes podem exceder o limite do LM Studio. Fatiar em sub-lotes.
   - Consulta (UI): filtro `delivery_process` é suportado pela API mas não há select na tela; adicionar select dependente de squad.
@@ -63,8 +68,8 @@ Memória operacional única e enxuta. Substitui a máquina completa de workflow-
 
 ## Mapa de integração
 
-- Django (`apps/web/`) → FastAPI (`apps/api/`): contratos `upload-and-metadata`, `query-and-citations`, `organization-admin`, `document-links`.
-- FastAPI → PostgreSQL: `squad`, `delivery_process`, `category`, `subcategory`, `document`, `document_link`, `chunk`, `ingestion_job`, `query_log?`.
+- Django (`apps/web/`) → FastAPI (`apps/api/`): contratos `upload-and-metadata` (+file/delete), `query-and-citations` (+feedback), `organization-admin`, `document-links`, `logs-and-health`. Arquivo de documento servido por **proxy** Django.
+- FastAPI → PostgreSQL: `squad`, `delivery_process`, `category`, `subcategory`, `document`, `document_link`, `chunk`, `ingestion_job`, `query_log`, `system_log`.
 - FastAPI → Milvus: coleção de vetores (`vector[768]` + `chunk_id` + payload `document_id`/`doc_type`/`tags`/`author`/`squad_id`/`delivery_process_id`/`category`/`subcategory`). Container (`ops/`, Podman).
 - FastAPI → PostgreSQL: container (`ops/`, Podman).
 - FastAPI → LM Studio (API OpenAI-compatível, `base_url` configurável): embeddings `embeddinggemma-300m` (`/v1/embeddings`) e geração (`/v1/chat/completions`).

@@ -1,6 +1,7 @@
 """Retrieval + expansão por vínculos + geração com citações (FEAT-QUERY-001, ADR-0008)."""
 from __future__ import annotations
 
+import time
 import uuid
 
 from sqlalchemy import select
@@ -29,12 +30,34 @@ def _map_filters(filters: dict | None) -> dict:
     return out
 
 
+def _metrics(started: float, hits: list[dict]) -> dict:
+    """Snapshot de parâmetros + medições para auditoria/tuning (ADR-0011)."""
+    return {
+        "scores": [round(float(h["score"]), 4) for h in hits],
+        "retrieved_chunk_ids": [h["chunk_id"] for h in hits],
+        "retrieved_document_ids": sorted({h["document_id"] for h in hits if h.get("document_id")}),
+        "embedding_model": settings.embedding_model,
+        "chat_model": settings.chat_model,
+        "chunk_size_words": settings.chunk_size_words,
+        "chunk_overlap_words": settings.chunk_overlap_words,
+        "retrieval_min_score": settings.retrieval_min_score,
+        "latency_ms": int((time.monotonic() - started) * 1000),
+    }
+
+
 def answer_query(session: Session, question: str, filters: dict | None, top_k: int) -> dict:
+    started = time.monotonic()
     qvec = embeddings.embed_query(question)
     hits = vectorstore.search(qvec, top_k, _map_filters(filters))
 
     if not hits or hits[0]["score"] < settings.retrieval_min_score:
-        return {"answer": None, "insufficient_context": True, "citations": [], "linked_flow": []}
+        return {
+            "answer": None,
+            "insufficient_context": True,
+            "citations": [],
+            "linked_flow": [],
+            "metrics": _metrics(started, hits),
+        }
 
     # chunks base (via milvus_vector_id = chunk_id)
     hit_ids = [h["chunk_id"] for h in hits]
@@ -94,6 +117,7 @@ def answer_query(session: Session, question: str, filters: dict | None, top_k: i
         "insufficient_context": False,
         "citations": citations,
         "linked_flow": linked_flow,
+        "metrics": _metrics(started, hits),
     }
 
 

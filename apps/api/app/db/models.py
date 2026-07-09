@@ -11,8 +11,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -21,14 +23,17 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-# Listas fixas (ver docs/specs/reference/taxonomy.md e ADR-0008/0009)
+# Listas fixas (ver docs/specs/reference/taxonomy.md e ADR-0008/0009/0011)
 LINK_TYPES = ("esclarece", "complementa", "precede", "substitui")
 JOB_STATES = ("pending", "processing", "indexed", "failed")
+LOG_LEVELS = ("INFO", "WARN", "ERROR")
+LOG_COMPONENTS = ("api", "worker", "ingestion", "retrieval")
+FEEDBACK_RATINGS = {"up": 1, "down": -1}  # 👍 / 👎 → valor persistido em query_log.rating
 CLASSIFICATION_SOURCES = ("llm", "user")
 DOC_TYPES = (
     "Documento técnico", "Manual / Guia", "Procedimento / Runbook", "Especificação / Requisito",
@@ -223,3 +228,70 @@ class IngestionJob(TimestampMixin, Base):
     )
 
     document: Mapped["Document"] = relationship(back_populates="ingestion_jobs")
+
+
+class QueryLog(Base):
+    """Auditoria de consulta + feedback de qualidade (ADR-0011, FEAT-QUERY-001).
+
+    Grava toda `/query` com as métricas necessárias para azeitar modelo/chunking/retrieval.
+    `rating` é preenchido pelo feedback 👍/👎 do usuário (NULL = sem voto).
+    Não há FK para chunk/document: os ids ficam como snapshot em colunas JSONB — a linha
+    sobrevive à exclusão dos documentos (o histórico de avaliação não deve ser apagado).
+    """
+    __tablename__ = "query_log"
+    __table_args__ = (
+        CheckConstraint("rating IS NULL OR rating IN (-1, 1)", name="ck_querylog_rating"),
+        Index("ix_querylog_created", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    filters: Mapped[dict | None] = mapped_column(JSONB)
+    top_k: Mapped[int] = mapped_column(Integer, nullable=False)
+    insufficient_context: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    answer: Mapped[str | None] = mapped_column(Text)
+    citations: Mapped[list | None] = mapped_column(JSONB)
+    linked_flow: Mapped[list | None] = mapped_column(JSONB)
+    scores: Mapped[list | None] = mapped_column(JSONB)
+    retrieved_chunk_ids: Mapped[list | None] = mapped_column(JSONB)
+    retrieved_document_ids: Mapped[list | None] = mapped_column(JSONB)
+
+    # Snapshot dos parâmetros do modelo/pipeline no momento da consulta (tuning)
+    embedding_model: Mapped[str | None] = mapped_column(String(200))
+    chat_model: Mapped[str | None] = mapped_column(String(200))
+    chunk_size_words: Mapped[int | None] = mapped_column(Integer)
+    chunk_overlap_words: Mapped[int | None] = mapped_column(Integer)
+    retrieval_min_score: Mapped[float | None] = mapped_column(Float)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+
+    rating: Mapped[int | None] = mapped_column(Integer)  # 1 = 👍, -1 = 👎 (ADR-0011)
+    rating_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SystemLog(Base):
+    """Log de eventos do sistema persistido no Postgres (ADR-0011).
+
+    API e worker gravam eventos estruturados para troubleshooting/observabilidade.
+    Best-effort: uma falha ao gravar log nunca deve derrubar o fluxo principal.
+    """
+    __tablename__ = "system_log"
+    __table_args__ = (
+        CheckConstraint("level IN ('INFO','WARN','ERROR')", name="ck_syslog_level"),
+        Index("ix_syslog_ts", "ts"),
+        Index("ix_syslog_component", "component"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    level: Mapped[str] = mapped_column(String(10), nullable=False)
+    component: Mapped[str] = mapped_column(String(20), nullable=False)
+    event: Mapped[str] = mapped_column(String(120), nullable=False)
+    message: Mapped[str | None] = mapped_column(Text)
+    context: Mapped[dict | None] = mapped_column(JSONB)
+    document_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))

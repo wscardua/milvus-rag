@@ -1,7 +1,7 @@
 ---
 id: FEAT-UPLOAD-001
 title: Upload e Metadados de Documento
-version: 0.3.0
+version: 0.4.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
@@ -9,7 +9,7 @@ created: 2026-07-09
 updated: 2026-07-09
 contracts: [upload-and-metadata, document-links]
 depends_on: []
-adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008]
+adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008, ADR-0010]
 ---
 
 # Feature — Upload e Metadados de Documento
@@ -28,9 +28,12 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - **Tipos aceitos:** PDF, DOCX, TXT/Markdown, HTML, `.py`, XLS/XLSX (ADR-0002).
 - Criação do documento na API e disparo da ingestão.
 - Exibição do estado de ingestão do documento.
+- **Exclusão do documento** (hard delete: remove chunks + vetores + arquivo — ADR-0010).
+- **Visualização e download** do arquivo original (ADR-0010).
 ### Fora de escopo
 - Extração/chunking/embeddings e sugestão de `title`/classificação (ver FEAT-INGEST-001).
 - Versionamento de documento e reupload com histórico (fora da POC).
+- Soft-delete/lixeira: a exclusão é definitiva.
 
 ## 4. Atores e pré-condições
 - **Ator:** usuário autenticado da UI Django.
@@ -55,8 +58,9 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - Upload trata o arquivo como entrada não confiável (tipo/tamanho validados; conteúdo só é processado na ingestão).
 
 ## 7. Contratos e integrações
-- Contratos: `upload-and-metadata` (`POST /documents`, `GET /documents`, `GET /documents/{id}`) e `document-links` (vínculos iniciais, ADR-0008).
-- Erros previstos: `400` (validação), `413` (tamanho), `415` (tipo não suportado), `422` (squad/processo ou vínculo inválido).
+- Contratos: `upload-and-metadata` (`POST /documents`, `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/file`, `DELETE /documents/{id}`) e `document-links` (vínculos iniciais, ADR-0008).
+- Erros previstos: `400` (validação), `413` (tamanho), `415` (tipo não suportado), `422` (squad/processo ou vínculo inválido), `404` (documento/arquivo inexistente em file/delete).
+- Acesso ao arquivo e exclusão passam pela API (ADR-0010); a UI faz **proxy** do arquivo (não lê o disco).
 
 ## 8. Dados e persistência
 - `document`: arquivo + `delivery_process_id` (NOT NULL) + metadados (`title` opcional, `author`, `tags`, `doc_type`, timestamps).
@@ -69,9 +73,11 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - Risco: arquivo malicioso; mitigação: validação de tipo e isolamento do processamento.
 
 ## 10. Critérios de aceite
-- [ ] Upload com metadados válidos cria documento e inicia ingestão.
-- [ ] Arquivo de tipo/tamanho inválido é rejeitado com mensagem clara e sem criar documento.
-- [ ] Estado de ingestão é visível e atualiza até `indexed` ou `failed`.
+- [x] Upload com metadados válidos cria documento e inicia ingestão.
+- [x] Arquivo de tipo/tamanho inválido é rejeitado com mensagem clara e sem criar documento.
+- [x] Estado de ingestão é visível e atualiza até `indexed` ou `failed`.
+- [x] Excluir um documento remove sua linha, chunks (Postgres), vetores (Milvus) e o arquivo; reexclusão → `404`.
+- [x] Visualizar abre o arquivo (PDF/TXT/MD/HTML) e Baixar entrega o arquivo original (nomes acentuados ok).
 
 ## 11. Testes esperados
 - **Unitário:** validação de metadados e de arquivo (tipo/tamanho).
@@ -84,7 +90,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - ADR-0001 (stack). A ingestão em si é FEAT-INGEST-001.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack da POC. ADR-0002 — formatos. ADR-0007 — vínculo obrigatório squad/processo e título opcional (IA sugere). ADR-0008 — vínculos iniciais entre documentos.
+- ADR-0001 — stack da POC. ADR-0002 — formatos. ADR-0007 — vínculo obrigatório squad/processo e título opcional (IA sugere). ADR-0008 — vínculos iniciais entre documentos. ADR-0010 — exclusão (cascade + Milvus + arquivo) e acesso ao arquivo (view/download via proxy).
 
 ## 14. Pendências e questões em aberto
 - Definir limite máximo de tamanho de arquivo (tipos já fixados em ADR-0002).
@@ -92,6 +98,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-09 | 0.4.0 | - | Exclusão de documento (hard delete: chunks+vetores+arquivo) e visualização/download do arquivo (via proxy) | WORK-003, ADR-0010 |
 | 2026-07-09 | 0.3.0 | - | Vínculo obrigatório squad/processo; `title` opcional (IA sugere); vínculos iniciais entre documentos | ADR-0007, ADR-0008 |
 | 2026-07-09 | 0.2.0 | - | Formatos de arquivo fixados; spec aprovada | ADR-0002 |
 | 2026-07-09 | 0.1.0 | - | Criação inicial da spec | ADR-0001 |
