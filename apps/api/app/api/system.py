@@ -29,8 +29,9 @@ def _check_postgres(session: Session) -> dict:
 
 def _check_milvus() -> dict:
     try:
-        ok = vectorstore._c().has_collection(settings.milvus_collection)
-        return {"name": "milvus", "ok": bool(ok), "detail": f"coleção {settings.milvus_collection}"}
+        exists = vectorstore.ping()  # não cria a coleção (health é somente-leitura)
+        detail = f"coleção {settings.milvus_collection}" + ("" if exists else " ausente")
+        return {"name": "milvus", "ok": exists, "detail": detail}
     except Exception as exc:  # noqa: BLE001
         return {"name": "milvus", "ok": False, "detail": str(exc)[:200]}
 

@@ -53,6 +53,18 @@ def delete_by_document(document_id: str) -> None:
     _c().delete(collection_name=settings.milvus_collection, filter=f'document_id == "{document_id}"')
 
 
+def ping() -> bool:
+    """Conecta e diz se a coleção existe — SEM criá-la (para /health).
+
+    Não usa `_c()` de propósito: o health check é somente-leitura e não deve
+    provocar `_ensure_collection` (efeito colateral de criar a coleção).
+    """
+    client = _client if _client is not None else MilvusClient(
+        uri=f"http://{settings.milvus_host}:{settings.milvus_port}"
+    )
+    return bool(client.has_collection(settings.milvus_collection))
+
+
 def search(vector: list[float], top_k: int, filters: dict | None = None) -> list[dict]:
     """Retorna [{chunk_id, document_id, score}] ordenado por similaridade (COSINE)."""
     exprs = []

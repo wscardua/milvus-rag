@@ -191,6 +191,9 @@ def document_file(request, document_id):
         raise Http404(f"API indisponível ({exc}).")
     if upstream.status_code == 404:
         raise Http404("Arquivo não encontrado.")
+    if upstream.status_code >= 400:
+        # repassa a falha em vez de servir o corpo de erro como se fosse o arquivo
+        raise Http404("Falha ao obter o arquivo do documento.")
     resp = HttpResponse(
         upstream.content,
         content_type=upstream.headers.get("content-type", "application/octet-stream"),
