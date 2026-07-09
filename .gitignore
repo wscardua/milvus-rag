@@ -1,0 +1,27 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Ambiente / segredos
+.env
+.env.*
+!.env.example
+
+# Dados locais da POC: uploads (app) + volumes dos containers (infra)
+# data/volumes/{postgres,milvus,etcd,minio} e data/uploads/
+/data/
+*.sqlite3
+
+# Logs transitórios
+*.log
+
+# SO / editor
+.DS_Store
+.idea/
+.vscode/
