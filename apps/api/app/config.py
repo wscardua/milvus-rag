@@ -47,5 +47,16 @@ class Settings(BaseSettings):
     chunk_size_words: int = 350
     chunk_overlap_words: int = 60
 
+    # Vision — descrição de imagens durante ingestão (ADR-0012)
+    vision_enabled: bool = True
+    # Modelo vision: usa o mesmo servidor LM Studio (lm_studio_base_url).
+    # Default = mesmo modelo de chat (gemma-3-4b-it-qat tem capability Vision).
+    # Para trocar: basta mudar VISION_MODEL no .env — zero mudança de código.
+    vision_model: str = "gemma-3-4b-it-qat"
+    vision_max_tokens: int = 800  # tabelas densas não truncam (entra no chunking com o texto)
+    # Render da região da imagem na página em alta DPI (em vez do bitmap embutido):
+    # normaliza colorspace, captura a imagem como exibida e garante tamanho legível.
+    vision_render_dpi: int = 200
+
 
 settings = Settings()

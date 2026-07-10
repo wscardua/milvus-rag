@@ -1,15 +1,15 @@
 ---
 id: FEAT-INGEST-001
 title: Pipeline de Ingestão
-version: 0.8.0
+version: 0.9.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-10
 contracts: [upload-and-metadata]
 depends_on: [FEAT-UPLOAD-001]
-adrs: [ADR-0001, ADR-0002, ADR-0004, ADR-0007, ADR-0009, ADR-0010, ADR-0011]
+adrs: [ADR-0001, ADR-0002, ADR-0004, ADR-0007, ADR-0009, ADR-0010, ADR-0011, ADR-0012]
 ---
 
 # Feature — Pipeline de Ingestão
@@ -29,9 +29,10 @@ Após o upload (FEAT-UPLOAD-001), o documento é só um arquivo. Para responder 
 - **Classificação por IA (ADR-0007):** sugere `title` (quando vazio no upload), `category`/`subcategory` dentro da **taxonomia fixa** ([reference/taxonomy.md](../reference/taxonomy.md)) e gera `summary`, gravados no `document` com `classification_source = llm` (editável depois pelo usuário via `PATCH /documents/{id}`).
 - Indexação no Milvus (payload inclui `squad_id`/`delivery_process_id`/`category`/`subcategory`) e persistência dos chunks no Postgres.
 - Preenche `ingested_at` ao concluir; gestão de estado do `ingestion_job` e reprocessamento idempotente.
+- **Descrição de imagens por LLM vision (ADR-0012):** quando `VISION_ENABLED` (default `true`), imagens embutidas em **PDF e DOCX** são extraídas, descritas por um modelo vision via LM Studio (`VISION_MODEL`) e **intercaladas no texto** — formato `[Imagem — página N: …]` / `[Imagem — parágrafo N: …]` — antes do chunking. **Best-effort** (falha não interrompe a ingestão); sem mudança no contrato do índice nem no schema.
 ### Fora de escopo
 - Retrieval e geração de resposta (ver FEAT-QUERY-001).
-- OCR de imagens/scan (fora da POC, salvo decisão em ADR).
+- OCR (Tesseract) — fora da POC.
 
 ## 4. Atores e pré-condições
 - **Ator:** job de ingestão disparado pela API após upload.
@@ -73,6 +74,7 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 ## 9. Segurança, privacidade e riscos
 - Conteúdo é entrada não confiável; sanitizar antes de usar em prompts (mitiga prompt injection na etapa de query **e na classificação por IA**).
 - Classificação/resumo por IA a partir do conteúdo → prompt injection pode envenenar `category`/`subcategory`/`summary`; restringir a saída à taxonomia e permitir override do usuário (`classification_source`).
+- **Prompt injection via imagem (ADR-0012):** o conteúdo visual é entrada não confiável e pode conter instruções embutidas; o system prompt do serviço vision instrui o modelo a ignorá-las e o conteúdo bruto da imagem não é logado. A descrição resultante é tratada como texto do documento (mesmo regime de confiança dos demais chunks).
 - Risco de custo/latência na geração de embeddings em lote → considerar batching.
 - PII presente nos chunks herda o tratamento sensível do documento.
 
@@ -94,7 +96,7 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 - Parsers por formato; `pymilvus`; cliente OpenAI-compatível (LM Studio); LM Studio com o modelo de embedding carregado.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack. ADR-0002 — embeddings locais, formatos e runtime do Milvus. ADR-0004 — worker daemon assíncrono. ADR-0007 — organização Squad/Processo e classificação. ADR-0009 — retry, visibility timeout e recuperação de jobs presos. ADR-0010 — exclusão remove chunks + vetores (mesmo mecanismo idempotente `delete_by_document`). ADR-0011 — worker emite eventos no `system_log` (`worker_started`/`worker_heartbeat`/`job_indexed`/`job_retry`/`job_failed`).
+- ADR-0001 — stack. ADR-0002 — embeddings locais, formatos e runtime do Milvus. ADR-0004 — worker daemon assíncrono. ADR-0007 — organização Squad/Processo e classificação. ADR-0009 — retry, visibility timeout e recuperação de jobs presos. ADR-0010 — exclusão remove chunks + vetores (mesmo mecanismo idempotente `delete_by_document`). ADR-0011 — worker emite eventos no `system_log` (`worker_started`/`worker_heartbeat`/`job_indexed`/`job_retry`/`job_failed`). ADR-0012 — descrição de imagens por LLM vision (best-effort) intercalada no texto antes do chunking; PyMuPDF (AGPL) para extrair imagens do PDF.
 
 ## 14. Pendências e questões em aberto
 - Calibrar tamanho/overlap de chunking por família de formato (default definido; ajuste após avaliação de retrieval).
@@ -103,6 +105,7 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-10 | 0.9.0 | - | Descrição de imagens por LLM vision (best-effort) intercalada no texto antes do chunking, em PDF e DOCX; habilitável por `VISION_ENABLED`; PyMuPDF para extrair imagens do PDF | WORK-005, ADR-0012 |
 | 2026-07-09 | 0.8.0 | - | Exclusão de documento remove chunks + vetores (`delete_by_document`); worker emite eventos no `system_log` (start/heartbeat/indexed/retry/failed) | WORK-003, ADR-0010, ADR-0011 |
 | 2026-07-09 | 0.7.0 | - | Política de retry/backoff, visibility timeout e recuperação de jobs presos; campos `attempts`/`started_at`/`heartbeat_at`/`available_at` | ADR-0009 |
 | 2026-07-09 | 0.6.0 | - | IA também sugere `title` (quando vazio no upload) | ADR-0007 |
