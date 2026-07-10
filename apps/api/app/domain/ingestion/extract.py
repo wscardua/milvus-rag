@@ -6,10 +6,13 @@ transparente para o pipeline (a assinatura de `extract_text` não muda).
 """
 from __future__ import annotations
 
+import logging
 import os
 
 from app.config import settings
 from app.domain.ingestion.errors import PermanentIngestionError
+
+log = logging.getLogger("worker.extract")
 
 _TEXT_EXT = {".txt", ".md", ".py"}
 
@@ -52,30 +55,52 @@ def _extract_pdf(path: str, filename: str) -> str:
     from pypdf import PdfReader
 
     reader = PdfReader(path)
-    if not settings.vision_enabled:
+
+    def _text_only() -> str:
         return "\n".join((page.extract_text() or "") for page in reader.pages)
-    return _extract_pdf_with_vision(path, filename, reader)
+
+    if not settings.vision_enabled:
+        return _text_only()
+    try:
+        return _extract_pdf_with_vision(path, filename, reader)
+    except Exception as exc:  # noqa: BLE001 — vision é best-effort (ADR-0012): degrada p/ texto
+        log.warning("Extração com vision falhou em %s (segue só com texto): %s", filename, exc)
+        return _text_only()
 
 
 def _extract_pdf_with_vision(path: str, filename: str, reader) -> str:
-    """Texto via pypdf; imagens embutidas via PyMuPDF (ADR-0012), intercaladas por página."""
+    """Texto via pypdf; imagens embutidas via PyMuPDF (ADR-0012), intercaladas por página.
+
+    Best-effort por página: falha ao abrir/ler uma página não interrompe as demais.
+    Deduplica por `xref` — imagem repetida (ex.: logo) reusa a descrição, sem nova chamada.
+    """
     import fitz  # PyMuPDF
 
     from app.services import vision
 
     parts: list[str] = []
+    desc_by_xref: dict[int, str] = {}
     fdoc = fitz.open(path)
     try:
         for page_num, page in enumerate(reader.pages, start=1):
             parts.append(page.extract_text() or "")
             if page_num - 1 >= fdoc.page_count:
                 continue
-            fpage = fdoc.load_page(page_num - 1)
-            for img in fpage.get_images(full=True):
-                image_bytes = _image_png_for_vision(fdoc, fpage, img[0])
-                if not image_bytes:
-                    continue
-                desc = vision.describe_image(image_bytes, filename, f"página {page_num}")
+            try:
+                fpage = fdoc.load_page(page_num - 1)
+                images = fpage.get_images(full=True)
+            except Exception:  # noqa: BLE001 — página problemática não interrompe as demais
+                continue
+            for img in images:
+                xref = img[0]
+                if xref not in desc_by_xref:
+                    image_bytes = _image_png_for_vision(fdoc, fpage, xref)
+                    desc_by_xref[xref] = (
+                        vision.describe_image(image_bytes, filename, f"página {page_num}")
+                        if image_bytes
+                        else ""
+                    )
+                desc = desc_by_xref[xref]
                 if desc:
                     parts.append(f"[Imagem — página {page_num}: {desc}]")
     finally:
@@ -84,19 +109,25 @@ def _extract_pdf_with_vision(path: str, filename: str, reader) -> str:
 
 
 def _image_png_for_vision(fdoc, fpage, xref) -> bytes | None:
-    """PNG da imagem para o vision (ADR-0012).
+    """PNG da imagem para o vision (ADR-0012). Sempre retorna PNG (casa com o MIME enviado).
 
     Renderiza a região onde a imagem aparece na página em alta DPI
     (`settings.vision_render_dpi`): normaliza colorspace, captura a imagem como
     exibida e garante tamanho legível — melhor para tabelas/prints densos que o
-    bitmap embutido. Fallback para o bitmap embutido se não houver retângulo.
+    bitmap embutido. Fallback: bitmap embutido convertido para PNG (RGB) se não
+    houver retângulo de posição.
     """
+    import fitz  # PyMuPDF
+
     try:
         rects = fpage.get_image_rects(xref)
         if rects:
             pix = fpage.get_pixmap(clip=rects[0], dpi=settings.vision_render_dpi)
-            return pix.tobytes("png")
-        return fdoc.extract_image(xref)["image"]
+        else:
+            pix = fitz.Pixmap(fdoc, xref)
+            if pix.n - pix.alpha >= 4:  # CMYK/separação → RGB para gerar PNG válido
+                pix = fitz.Pixmap(fitz.csRGB, pix)
+        return pix.tobytes("png")
     except Exception:  # noqa: BLE001 — imagem problemática não interrompe a extração
         return None
 
@@ -107,7 +138,11 @@ def _extract_docx(path: str, filename: str) -> str:
     doc = docx.Document(path)
     if not settings.vision_enabled:
         return "\n".join(p.text for p in doc.paragraphs)
-    return _extract_docx_with_vision(doc, filename)
+    try:
+        return _extract_docx_with_vision(doc, filename)
+    except Exception as exc:  # noqa: BLE001 — vision é best-effort (ADR-0012): degrada p/ texto
+        log.warning("Extração com vision falhou em %s (segue só com texto): %s", filename, exc)
+        return "\n".join(p.text for p in doc.paragraphs)
 
 
 def _extract_docx_with_vision(doc, filename: str) -> str:
