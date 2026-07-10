@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db.models import Category, Chunk, Document, Subcategory
 from app.domain.ingestion import classify, extract
 from app.domain.ingestion.chunking import chunk_text
@@ -45,6 +46,8 @@ def _apply_classification(session: Session, doc: Document, text: str) -> None:
 
 
 def ingest_document(session: Session, doc: Document) -> None:
+    if settings.vision_enabled:
+        log.info("Extração com vision habilitada para %s", doc.original_filename)
     text = extract.extract_text(doc.storage_path, doc.original_filename or "")
     if not text.strip():
         raise PermanentIngestionError("Documento sem texto extraível.")

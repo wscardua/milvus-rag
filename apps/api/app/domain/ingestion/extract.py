@@ -1,24 +1,31 @@
-"""Extração de texto por família de formato (ADR-0002)."""
+"""Extração de texto por família de formato (ADR-0002).
+
+Quando `settings.vision_enabled` (ADR-0012), imagens embutidas em PDF/DOCX são
+descritas por LLM vision e intercaladas no texto antes do chunking — de forma
+transparente para o pipeline (a assinatura de `extract_text` não muda).
+"""
 from __future__ import annotations
 
 import os
 
+from app.config import settings
 from app.domain.ingestion.errors import PermanentIngestionError
 
 _TEXT_EXT = {".txt", ".md", ".py"}
 
 
 def extract_text(path: str, filename: str) -> str:
-    ext = os.path.splitext(filename or path)[1].lower()
+    fname = filename or os.path.basename(path)
+    ext = os.path.splitext(fname)[1].lower()
     try:
         if ext in _TEXT_EXT:
             return _read_text(path)
         if ext in {".html", ".htm"}:
             return _extract_html(path)
         if ext == ".pdf":
-            return _extract_pdf(path)
+            return _extract_pdf(path, fname)
         if ext == ".docx":
-            return _extract_docx(path)
+            return _extract_docx(path, fname)
         if ext in {".xls", ".xlsx"}:
             return _extract_xlsx(path)
     except PermanentIngestionError:
@@ -41,18 +48,90 @@ def _extract_html(path: str) -> str:
     return soup.get_text(separator="\n")
 
 
-def _extract_pdf(path: str) -> str:
+def _extract_pdf(path: str, filename: str) -> str:
     from pypdf import PdfReader
 
     reader = PdfReader(path)
-    return "\n".join((page.extract_text() or "") for page in reader.pages)
+    if not settings.vision_enabled:
+        return "\n".join((page.extract_text() or "") for page in reader.pages)
+    return _extract_pdf_with_vision(path, filename, reader)
 
 
-def _extract_docx(path: str) -> str:
+def _extract_pdf_with_vision(path: str, filename: str, reader) -> str:
+    """Texto via pypdf; imagens embutidas via PyMuPDF (ADR-0012), intercaladas por página."""
+    import fitz  # PyMuPDF
+
+    from app.services import vision
+
+    parts: list[str] = []
+    fdoc = fitz.open(path)
+    try:
+        for page_num, page in enumerate(reader.pages, start=1):
+            parts.append(page.extract_text() or "")
+            if page_num - 1 >= fdoc.page_count:
+                continue
+            fpage = fdoc.load_page(page_num - 1)
+            for img in fpage.get_images(full=True):
+                image_bytes = _image_png_for_vision(fdoc, fpage, img[0])
+                if not image_bytes:
+                    continue
+                desc = vision.describe_image(image_bytes, filename, f"página {page_num}")
+                if desc:
+                    parts.append(f"[Imagem — página {page_num}: {desc}]")
+    finally:
+        fdoc.close()
+    return "\n".join(parts)
+
+
+def _image_png_for_vision(fdoc, fpage, xref) -> bytes | None:
+    """PNG da imagem para o vision (ADR-0012).
+
+    Renderiza a região onde a imagem aparece na página em alta DPI
+    (`settings.vision_render_dpi`): normaliza colorspace, captura a imagem como
+    exibida e garante tamanho legível — melhor para tabelas/prints densos que o
+    bitmap embutido. Fallback para o bitmap embutido se não houver retângulo.
+    """
+    try:
+        rects = fpage.get_image_rects(xref)
+        if rects:
+            pix = fpage.get_pixmap(clip=rects[0], dpi=settings.vision_render_dpi)
+            return pix.tobytes("png")
+        return fdoc.extract_image(xref)["image"]
+    except Exception:  # noqa: BLE001 — imagem problemática não interrompe a extração
+        return None
+
+
+def _extract_docx(path: str, filename: str) -> str:
     import docx
 
     doc = docx.Document(path)
-    return "\n".join(p.text for p in doc.paragraphs)
+    if not settings.vision_enabled:
+        return "\n".join(p.text for p in doc.paragraphs)
+    return _extract_docx_with_vision(doc, filename)
+
+
+def _extract_docx_with_vision(doc, filename: str) -> str:
+    """Texto via python-docx; imagens (blips do XML) descritas por vision (ADR-0012)."""
+    from docx.oxml.ns import qn
+
+    from app.services import vision
+
+    part = doc.part
+    parts: list[str] = []
+    for ordinal, para in enumerate(doc.paragraphs, start=1):
+        parts.append(para.text)
+        for blip in para._p.findall(".//" + qn("a:blip")):
+            rid = blip.get(qn("r:embed"))
+            if not rid:
+                continue
+            try:
+                image_bytes = part.related_parts[rid].blob
+            except KeyError:  # relação ausente/externa — ignora
+                continue
+            desc = vision.describe_image(image_bytes, filename, f"parágrafo {ordinal}")
+            if desc:
+                parts.append(f"[Imagem — parágrafo {ordinal}: {desc}]")
+    return "\n".join(parts)
 
 
 def _extract_xlsx(path: str) -> str:
