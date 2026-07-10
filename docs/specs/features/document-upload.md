@@ -1,15 +1,15 @@
 ---
 id: FEAT-UPLOAD-001
 title: Upload e Metadados de Documento
-version: 0.4.0
+version: 0.5.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-10
 contracts: [upload-and-metadata, document-links]
 depends_on: []
-adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008, ADR-0010]
+adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008, ADR-0010, ADR-0013]
 ---
 
 # Feature — Upload e Metadados de Documento
@@ -23,7 +23,8 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 ## 3. Escopo
 ### Incluído
 - **Vínculo obrigatório a Squad → Processo de Delivery** (ADR-0007) — selects dependentes.
-- Formulário de upload de arquivo(s) com metadados: `title` (**opcional** — IA sugere, ADR-0007), `author`, `tags`, `doc_type`.
+- Formulário de upload de arquivo(s) com metadados: `title` (**opcional** — IA sugere, ADR-0007), `author`, `tags`.
+- **`doc_type` obrigatório no upload (ADR-0013)** — orienta o perfil de chunking na ingestão (não é sugerido pela IA; ver [reference/taxonomy.md](../reference/taxonomy.md)).
 - **Vínculos iniciais opcionais** a outros documentos da mesma squad (ADR-0008).
 - **Tipos aceitos:** PDF, DOCX, TXT/Markdown, HTML, `.py`, XLS/XLSX (ADR-0002).
 - Criação do documento na API e disparo da ingestão.
@@ -49,6 +50,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 ### Fluxos alternativos e de erro
 - Tipo/tamanho inválido → rejeição com mensagem clara (sem criar documento).
 - Squad/processo ausente ou vínculo fora da squad → erro de validação (`422`).
+- `doc_type` ausente ou inválido (fora da taxonomia) → rejeição `422` (ADR-0013).
 - Título vazio → aceito; IA sugere na ingestão (fallback = nome do arquivo).
 - Falha ao criar documento na API → mensagem de erro; nada é persistido.
 
@@ -78,6 +80,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - [x] Estado de ingestão é visível e atualiza até `indexed` ou `failed`.
 - [x] Excluir um documento remove sua linha, chunks (Postgres), vetores (Milvus) e o arquivo; reexclusão → `404`.
 - [x] Visualizar abre o arquivo (PDF/TXT/MD/HTML) e Baixar entrega o arquivo original (nomes acentuados ok).
+- [ ] Upload sem doc_type é rejeitado com 422.
 
 ## 11. Testes esperados
 - **Unitário:** validação de metadados e de arquivo (tipo/tamanho).
@@ -98,6 +101,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-10 | 0.5.0 | - | doc_type obrigatório no upload (orienta o perfil de chunking na ingestão) | WORK-006, ADR-0013 |
 | 2026-07-09 | 0.4.0 | - | Exclusão de documento (hard delete: chunks+vetores+arquivo) e visualização/download do arquivo (via proxy) | WORK-003, ADR-0010 |
 | 2026-07-09 | 0.3.0 | - | Vínculo obrigatório squad/processo; `title` opcional (IA sugere); vínculos iniciais entre documentos | ADR-0007, ADR-0008 |
 | 2026-07-09 | 0.2.0 | - | Formatos de arquivo fixados; spec aprovada | ADR-0002 |

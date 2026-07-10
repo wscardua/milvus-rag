@@ -23,6 +23,7 @@ Eixo *assunto* do documento, no contexto de delivery de squads. Sugerida pela IA
 Eixo *tipo* do documento. Escolhido pelo usuário no upload (não sugerido pela IA).
 
 - Documento técnico
+- Proposta Técnica
 - Manual / Guia
 - Procedimento / Runbook
 - Especificação / Requisito

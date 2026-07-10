@@ -33,7 +33,11 @@ def process_id(client: TestClient) -> str:
 def temp_document(client: TestClient, process_id: str):
     """Cria um documento descartável e garante a remoção ao final do teste."""
     files = {"file": ("teste_pytest.txt", io.BytesIO(b"conteudo de teste do pytest"), "text/plain")}
-    resp = client.post("/documents", data={"delivery_process_id": process_id}, files=files)
+    resp = client.post(
+        "/documents",
+        data={"delivery_process_id": process_id, "doc_type": "Outro"},  # doc_type obrigatório (ADR-0013)
+        files=files,
+    )
     assert resp.status_code == 201, resp.text
     doc = resp.json()
     yield doc

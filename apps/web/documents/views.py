@@ -52,16 +52,20 @@ def document_list(request):
 
 def document_upload(request):
     if request.method == "POST":
+        doc_type = request.POST.get("doc_type", "").strip()
+        if not doc_type:
+            messages.error(request, "Tipo de documento é obrigatório.")
+            return redirect("upload")
+        # doc_type e delivery_process_id são obrigatórios (ADR-0013 / ADR-0007) → sempre no payload.
+        # Só os campos verdadeiramente opcionais são filtrados quando vazios.
         data = {
             "delivery_process_id": request.POST.get("delivery_process_id", ""),
-            "author": request.POST.get("author", ""),
-            "doc_type": request.POST.get("doc_type", ""),
-            "tags": request.POST.get("tags", ""),
+            "doc_type": doc_type,
         }
-        title = request.POST.get("title", "").strip()
-        if title:
-            data["title"] = title
-        data = {k: v for k, v in data.items() if v}
+        for field in ("author", "tags", "title"):
+            value = request.POST.get(field, "").strip()
+            if value:
+                data[field] = value
         upload = request.FILES.get("file")
         if not upload:
             messages.error(request, "Selecione um arquivo.")

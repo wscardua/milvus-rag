@@ -47,6 +47,35 @@ class Settings(BaseSettings):
     chunk_size_words: int = 350
     chunk_overlap_words: int = 60
 
+    # Chunking por doc_type (ADR-0013; ADR-0006: tudo por env; fallback = chunk_size_words/chunk_overlap_words)
+    chunk_size_procedimento_runbook: int = 150
+    chunk_overlap_procedimento_runbook: int = 20
+    chunk_size_transcricao_reuniao: int = 200
+    chunk_overlap_transcricao_reuniao: int = 50
+    chunk_size_ata_reuniao: int = 200
+    chunk_overlap_ata_reuniao: int = 40
+    chunk_size_codigo_fonte: int = 120
+    chunk_overlap_codigo_fonte: int = 15
+    chunk_size_planilha: int = 80
+    chunk_overlap_planilha: int = 10
+    chunk_size_contrato_legal: int = 500
+    chunk_overlap_contrato_legal: int = 100
+    chunk_size_manual_guia: int = 400
+    chunk_overlap_manual_guia: int = 80
+    chunk_size_relatorio: int = 400
+    chunk_overlap_relatorio: int = 70
+    chunk_size_documento_tecnico: int = 350
+    chunk_overlap_documento_tecnico: int = 60
+    chunk_size_proposta_tecnica: int = 300
+    chunk_overlap_proposta_tecnica: int = 60
+    chunk_size_especificacao_requisito: int = 300
+    chunk_overlap_especificacao_requisito: int = 60
+    chunk_size_base_conhecimento: int = 350
+    chunk_overlap_base_conhecimento: int = 60
+    chunk_size_apresentacao: int = 300
+    chunk_overlap_apresentacao: int = 50
+    # doc_type "Outro" e qualquer valor não mapeado usam chunk_size_words/chunk_overlap_words
+
     # Vision — descrição de imagens durante ingestão (ADR-0012)
     vision_enabled: bool = True
     # Modelo vision: usa o mesmo servidor LM Studio (lm_studio_base_url).

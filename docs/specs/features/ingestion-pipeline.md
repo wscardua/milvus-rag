@@ -1,7 +1,7 @@
 ---
 id: FEAT-INGEST-001
 title: Pipeline de Ingestão
-version: 0.9.0
+version: 0.10.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
@@ -9,7 +9,7 @@ created: 2026-07-09
 updated: 2026-07-10
 contracts: [upload-and-metadata]
 depends_on: [FEAT-UPLOAD-001]
-adrs: [ADR-0001, ADR-0002, ADR-0004, ADR-0007, ADR-0009, ADR-0010, ADR-0011, ADR-0012]
+adrs: [ADR-0001, ADR-0002, ADR-0004, ADR-0007, ADR-0009, ADR-0010, ADR-0011, ADR-0012, ADR-0013]
 ---
 
 # Feature — Pipeline de Ingestão
@@ -24,7 +24,8 @@ Após o upload (FEAT-UPLOAD-001), o documento é só um arquivo. Para responder 
 ### Incluído
 - **Worker daemon** que consome a fila `ingestion_job` no Postgres (ADR-0004).
 - Extração de texto por família de formato (ADR-0002): texto/MD direto; PDF/DOCX por parser; HTML sem marcação; XLS/XLSX por aba/linha; `.py` por blocos lógicos.
-- Chunking com tamanho/overlap definidos (default: ~512 tokens, overlap ~64 — ajustável; chunk < 2048 tokens do modelo).
+- **Chunking adaptativo por `doc_type` (ADR-0013, ADR-0006):** `size` e `overlap` configuráveis por variável de ambiente por tipo de documento; fallback para o default global (`chunk_size_words`/`chunk_overlap_words`) quando o `doc_type` não tem configuração específica (ex.: `Outro`) ou é `None`. Chunk < 2048 tokens do modelo.
+- **Log detalhado de ingestão (ADR-0011):** ao concluir, o worker registra o resumo do processamento no console e no evento `job_indexed` do `system_log` — no **`message`** (resumo legível, exibido na tela Logs & Saúde) e no **`context`** (mesmos campos estruturados, para consulta/tuning): `doc_type` + perfil aplicado (específico/fallback), tamanho do texto extraído, `chunk_size`/`overlap`, contagem de chunks e tokens por chunk (min/avg/max), nº de vetores, `vision_enabled` e `duration_ms`.
 - Geração de embeddings **em lote** com `embeddinggemma-300m` (768, COSINE) via LM Studio (`/v1/embeddings`).
 - **Classificação por IA (ADR-0007):** sugere `title` (quando vazio no upload), `category`/`subcategory` dentro da **taxonomia fixa** ([reference/taxonomy.md](../reference/taxonomy.md)) e gera `summary`, gravados no `document` com `classification_source = llm` (editável depois pelo usuário via `PATCH /documents/{id}`).
 - Indexação no Milvus (payload inclui `squad_id`/`delivery_process_id`/`category`/`subcategory`) e persistência dos chunks no Postgres.
@@ -96,15 +97,16 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 - Parsers por formato; `pymilvus`; cliente OpenAI-compatível (LM Studio); LM Studio com o modelo de embedding carregado.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack. ADR-0002 — embeddings locais, formatos e runtime do Milvus. ADR-0004 — worker daemon assíncrono. ADR-0007 — organização Squad/Processo e classificação. ADR-0009 — retry, visibility timeout e recuperação de jobs presos. ADR-0010 — exclusão remove chunks + vetores (mesmo mecanismo idempotente `delete_by_document`). ADR-0011 — worker emite eventos no `system_log` (`worker_started`/`worker_heartbeat`/`job_indexed`/`job_retry`/`job_failed`). ADR-0012 — descrição de imagens por LLM vision (best-effort) intercalada no texto antes do chunking; PyMuPDF (AGPL) para extrair imagens do PDF.
+- ADR-0001 — stack. ADR-0002 — embeddings locais, formatos e runtime do Milvus. ADR-0004 — worker daemon assíncrono. ADR-0007 — organização Squad/Processo e classificação. ADR-0009 — retry, visibility timeout e recuperação de jobs presos. ADR-0010 — exclusão remove chunks + vetores (mesmo mecanismo idempotente `delete_by_document`). ADR-0011 — worker emite eventos no `system_log` (`worker_started`/`worker_heartbeat`/`job_indexed`/`job_retry`/`job_failed`). ADR-0012 — descrição de imagens por LLM vision (best-effort) intercalada no texto antes do chunking; PyMuPDF (AGPL) para extrair imagens do PDF. ADR-0013 — chunking adaptativo por `doc_type` (perfis `size`/`overlap` por tipo, todos por env; fallback global) e `doc_type` obrigatório no upload.
 
 ## 14. Pendências e questões em aberto
-- Calibrar tamanho/overlap de chunking por família de formato (default definido; ajuste após avaliação de retrieval).
+- Calibrar valores de `chunk_size`/`overlap` por `doc_type` com avaliação de retrieval (golden set de perguntas + recall/precisão) — os defaults são estimativas razoáveis, não valores medidos (ADR-0013).
 - Listas de taxonomia definidas em [reference/taxonomy.md](../reference/taxonomy.md); resta definir o **prompt de classificação/resumo** que restringe a saída a essa taxonomia (ADR-0007).
 
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-10 | 0.10.0 | - | Chunking adaptativo por doc_type: perfis size/overlap por tipo, todos configuráveis via env (fallback global) | WORK-006, ADR-0013 |
 | 2026-07-10 | 0.9.0 | - | Descrição de imagens por LLM vision (best-effort) intercalada no texto antes do chunking, em PDF e DOCX; habilitável por `VISION_ENABLED`; PyMuPDF para extrair imagens do PDF | WORK-005, ADR-0012 |
 | 2026-07-09 | 0.8.0 | - | Exclusão de documento remove chunks + vetores (`delete_by_document`); worker emite eventos no `system_log` (start/heartbeat/indexed/retry/failed) | WORK-003, ADR-0010, ADR-0011 |
 | 2026-07-09 | 0.7.0 | - | Política de retry/backoff, visibility timeout e recuperação de jobs presos; campos `attempts`/`started_at`/`heartbeat_at`/`available_at` | ADR-0009 |

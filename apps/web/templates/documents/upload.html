@@ -42,9 +42,9 @@
   <div class="row">
     <div class="field"><label>Autor</label><input class="input" name="author" placeholder="Ex.: Equipe de Compliance"></div>
     <div class="field">
-      <label>Tipo de documento</label>
-      <select class="select" name="doc_type">
-        <option value="">—</option>
+      <label>Tipo de documento <span class="req">*</span></label>
+      <select class="select" name="doc_type" required>
+        <option value="" disabled selected>Selecione o tipo de documento…</option>
         {% for t in doc_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
       </select>
     </div>

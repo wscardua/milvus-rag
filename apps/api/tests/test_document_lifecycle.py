@@ -29,7 +29,11 @@ def test_delete_document_cascade(client, process_id):
     import io
 
     files = {"file": ("del_test.txt", io.BytesIO(b"apagar depois"), "text/plain")}
-    doc = client.post("/documents", data={"delivery_process_id": process_id}, files=files).json()
+    doc = client.post(
+        "/documents",
+        data={"delivery_process_id": process_id, "doc_type": "Outro"},  # doc_type obrigatório (ADR-0013)
+        files=files,
+    ).json()
     did = doc["id"]
 
     # há um ingestion_job pending logo após o upload
