@@ -8,9 +8,11 @@ Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /document
 - `metadata`: objeto com:
   - `delivery_process_id` (**obrigatório**, ADR-0007) — vincula o documento ao processo de delivery (e, por herança, à squad).
   - `title` (**opcional**, ADR-0007) — se vazio, a IA sugere na ingestão (fallback = nome do arquivo).
-  - `author`, `tags[]`, `doc_type`.
+  - `doc_type` (**obrigatório**, ADR-0013) — deve pertencer à lista em [reference/taxonomy.md](../reference/taxonomy.md); orienta o perfil de chunking na ingestão. Não é sugerido pela IA.
+  - `author`, `tags[]`.
   - `links[]` (**opcional**, ADR-0008) — vínculos iniciais (`target_document_id`, `link_type`); mesma squad.
 - **Não** aceita `category`/`subcategory`/`summary` no upload — são sugeridos pela ingestão (ver `PATCH` abaixo).
+- **Erros:** `422` quando `doc_type` está ausente ou não pertence à lista em [reference/taxonomy.md](../reference/taxonomy.md) (ADR-0013).
 
 ## Upload — resposta
 

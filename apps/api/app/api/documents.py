@@ -35,7 +35,7 @@ def upload_document(
     delivery_process_id: uuid.UUID = Form(...),
     title: str | None = Form(None),
     author: str | None = Form(None),
-    doc_type: str | None = Form(None),
+    doc_type: str = Form(...),  # obrigatório (ADR-0013): orienta o perfil de chunking na ingestão
     tags: str | None = Form(None),  # separadas por vírgula
     links: str | None = Form(None),  # JSON: [{"target_document_id","link_type","ordinal"}]
     session: Session = Depends(get_session),
@@ -44,7 +44,7 @@ def upload_document(
     if not process:
         raise HTTPException(422, "Processo de delivery inexistente.")
 
-    if doc_type is not None and doc_type not in DOC_TYPES:
+    if doc_type not in DOC_TYPES:
         raise HTTPException(422, f"doc_type inválido. Use um de {DOC_TYPES}.")
 
     ext = os.path.splitext(file.filename or "")[1].lower()

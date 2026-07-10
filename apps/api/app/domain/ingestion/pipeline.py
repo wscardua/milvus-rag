@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -14,11 +15,28 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db.models import Category, Chunk, Document, Subcategory
 from app.domain.ingestion import classify, extract
-from app.domain.ingestion.chunking import chunk_text
+from app.domain.ingestion.chunking import chunk_text, chunk_params, has_profile
 from app.domain.ingestion.errors import PermanentIngestionError
 from app.services import embeddings, vectorstore
 
 log = logging.getLogger("worker.pipeline")
+
+
+@dataclass
+class IngestStats:
+    """Resumo de uma ingestão bem-sucedida — alimenta o log e o `system_log` (ADR-0011)."""
+    doc_type: str | None
+    profile: str          # "doc_type" quando há perfil específico, senão "global (fallback)"
+    text_chars: int
+    text_words: int
+    chunk_size: int
+    chunk_overlap: int
+    chunk_count: int
+    tokens_min: int
+    tokens_avg: int
+    tokens_max: int
+    vision_enabled: bool
+    vectors: int
 
 
 def _apply_classification(session: Session, doc: Document, text: str) -> None:
@@ -45,7 +63,7 @@ def _apply_classification(session: Session, doc: Document, text: str) -> None:
         log.warning("Classificação por IA falhou (segue sem): %s", exc)
 
 
-def ingest_document(session: Session, doc: Document) -> None:
+def ingest_document(session: Session, doc: Document) -> IngestStats:
     if settings.vision_enabled:
         log.info("Extração com vision habilitada para %s", doc.original_filename)
     text = extract.extract_text(doc.storage_path, doc.original_filename or "")
@@ -54,9 +72,15 @@ def ingest_document(session: Session, doc: Document) -> None:
 
     _apply_classification(session, doc, text)
 
-    chunks = chunk_text(text)
+    size, overlap = chunk_params(doc.doc_type)
+    profile = "doc_type" if has_profile(doc.doc_type) else "global (fallback)"
+    log.info(
+        "Chunking doc_type=%r perfil=%s → size=%d overlap=%d", doc.doc_type, profile, size, overlap
+    )
+    chunks = chunk_text(text, size=size, overlap=overlap)
     if not chunks:
         raise PermanentIngestionError("Nenhum chunk gerado.")
+    token_counts = [len(c.split()) for c in chunks]
 
     # embeddings primeiro: se falhar, ainda não apagamos o índice antigo (reduz janela de inconsistência)
     vectors = embeddings.embed_texts(chunks)
@@ -79,7 +103,7 @@ def ingest_document(session: Session, doc: Document) -> None:
                 ordinal=ordinal,
                 text=content,
                 milvus_vector_id=cid.hex,
-                token_count=len(content.split()),
+                token_count=token_counts[ordinal],  # já calculado acima; evita re-split
             )
         )
         rows.append(
@@ -95,3 +119,18 @@ def ingest_document(session: Session, doc: Document) -> None:
         )
     vectorstore.upsert_chunks(rows)
     doc.ingested_at = datetime.now(timezone.utc)
+
+    return IngestStats(
+        doc_type=doc.doc_type,
+        profile=profile,
+        text_chars=len(text),
+        text_words=len(text.split()),
+        chunk_size=size,
+        chunk_overlap=overlap,
+        chunk_count=len(chunks),
+        tokens_min=min(token_counts),
+        tokens_avg=round(sum(token_counts) / len(token_counts)),
+        tokens_max=max(token_counts),
+        vision_enabled=settings.vision_enabled,
+        vectors=len(vectors),
+    )

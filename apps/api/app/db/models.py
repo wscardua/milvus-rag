@@ -36,9 +36,10 @@ LOG_COMPONENTS = ("api", "worker", "ingestion", "retrieval")
 FEEDBACK_RATINGS = {"up": 1, "down": -1}  # 👍 / 👎 → valor persistido em query_log.rating
 CLASSIFICATION_SOURCES = ("llm", "user")
 DOC_TYPES = (
-    "Documento técnico", "Manual / Guia", "Procedimento / Runbook", "Especificação / Requisito",
-    "Ata / Registro de reunião", "Transcrição de reunião", "Base de Conhecimento",
-    "Apresentação", "Planilha", "Contrato / Documento legal", "Código-fonte", "Relatório", "Outro",
+    "Documento técnico", "Proposta Técnica", "Manual / Guia", "Procedimento / Runbook",
+    "Especificação / Requisito", "Ata / Registro de reunião", "Transcrição de reunião",
+    "Base de Conhecimento", "Apresentação", "Planilha", "Contrato / Documento legal",
+    "Código-fonte", "Relatório", "Outro",
 )
 # Extensões aceitas no upload (ADR-0002)
 ALLOWED_EXTENSIONS = (".pdf", ".docx", ".txt", ".md", ".html", ".htm", ".py", ".xls", ".xlsx")

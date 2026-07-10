@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, or_, select
@@ -58,16 +59,32 @@ def _process_once(session) -> bool:
 
     job_id, attempts = job.id, job.attempts
     doc = session.get(Document, job.document_id)
-    log.info("Processando job %s (doc %s, tentativa %s)", job_id, job.document_id, attempts)
+    log.info(
+        "Processando job %s (doc %s '%s', doc_type=%r, tentativa %s)",
+        job_id, job.document_id, getattr(doc, "original_filename", None),
+        getattr(doc, "doc_type", None), attempts,
+    )
+    t0 = time.monotonic()
     try:
-        ingest_document(session, doc)
+        stats = ingest_document(session, doc)
         job.state = "indexed"
         job.error = None
         session.commit()
-        log.info("Job %s → indexed", job_id)
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        # Resumo legível — vai para o console E para o `message` do system_log (visível na tela
+        # Logs & Saúde). O detalhamento estruturado segue no `context` para consulta/tuning.
+        summary = (
+            f"Documento indexado em {duration_ms}ms | doc_type={stats.doc_type!r} "
+            f"perfil={stats.profile} | texto={stats.text_words} palavras/{stats.text_chars} chars | "
+            f"chunks={stats.chunk_count} (size={stats.chunk_size}/overlap={stats.chunk_overlap}) "
+            f"tokens/chunk min={stats.tokens_min} avg={stats.tokens_avg} max={stats.tokens_max} | "
+            f"vetores={stats.vectors} vision={stats.vision_enabled}"
+        )
+        log.info("Job %s → %s", job_id, summary)
         eventlog.log_event(
-            "INFO", "worker", "job_indexed", f"Documento indexado (job {job_id}).",
+            "INFO", "worker", "job_indexed", summary,
             document_id=job.document_id, job_id=job_id, attempts=attempts,
+            duration_ms=duration_ms, **asdict(stats),
         )
     except Exception as exc:  # noqa: BLE001
         session.rollback()
