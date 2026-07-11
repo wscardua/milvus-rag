@@ -5,10 +5,15 @@ Entre Django (UI) e FastAPI (`POST /query`, `POST /query/{query_id}/feedback`) e
 ## Requisição
 
 - `question`: string
-- `filters?`: filtros **opcionais** por metadado — `squad` / `delivery_process` (ADR-0007), `category`, `doc_type`, `tags`. Sem filtro, a busca é global.
+- `filters?`: filtros **opcionais** por metadado — `squad` / `delivery_process` (ADR-0007, ids resolvidos por nome via `organization-admin`), `category`, `doc_type`, `delivery_phase` e `tags` (ADR-0015). Sem filtro, a busca é global.
+  - `squad`/`delivery_process`/`category`: **UUID** (id), não o nome — resolver via `GET /squads`/`GET /delivery-processes`/`GET /categories`.
+  - `doc_type`/`delivery_phase`: valor da lista fechada (`reference/taxonomy.md`), igualdade simples.
+  - `tags`: lista de 1+ strings; semântica **OR** — hit incluído se tiver **qualquer uma** das tags pedidas (não interseção). AND fica fora de escopo da POC.
 - `top_k?`: número de chunks a recuperar (**default: 5**)
 
 Parâmetros de retrieval: `top_k` default 5; abaixo de um **limiar de similaridade** (COSINE, valor a calibrar) a API responde "sem contexto suficiente" em vez de gerar. Geração feita pelo LM Studio (API OpenAI-compatível).
+
+**Reindexação (ADR-0015):** `delivery_phase`/`tags` só filtram corretamente hits de documentos já reprocessados após a mudança de payload do Milvus (WORK-010) — documentos ingeridos antes disso não têm esses campos no payload e não aparecem em buscas filtradas por eles até o reprocessamento em massa terminar.
 
 **Vigência (ADR-0014):** documentos com `valid_until` no passado são **rebaixados** — o score é multiplicado por `retrieval_expired_score_factor` (config, default 0.5) e os hits são reordenados pelo score ajustado antes do limiar. Vencidos não são excluídos, apenas perdem relevância; o `score` reportado nas citações e o `query_log.scores` refletem o valor ajustado. Vale para `/query` e `/retrieve`.
 

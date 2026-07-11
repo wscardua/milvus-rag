@@ -62,6 +62,49 @@ def test_list_documents_translates_filters(monkeypatch):
     }
 
 
+def test_list_documents_translates_delivery_phase_and_tags(monkeypatch):
+    """WORK-010 / ADR-0015: delivery_phase e tags passam direto (mesmo nome na API)."""
+    cap: dict = {}
+    _fake_httpx(monkeypatch, capture=cap, resp=_FakeResp(200, []))
+    client.list_documents({"delivery_phase": "Testes", "tags": ["billing", "api"]})
+    assert cap["params"] == {"delivery_phase": "Testes", "tags": ["billing", "api"]}
+
+
+@pytest.mark.parametrize(
+    "fn,args,path,method",
+    [
+        (client.list_squads, (), "/squads", "GET"),
+        (client.list_categories, (), "/categories", "GET"),
+        (client.list_doc_types, (), "/doc-types", "GET"),
+        (client.list_delivery_phases, (), "/delivery-phases", "GET"),
+        (client.list_tags, (), "/tags", "GET"),
+    ],
+)
+def test_lookup_tools_are_thin_proxies(monkeypatch, fn, args, path, method):
+    """WORK-010: as tools de lookup são proxy 1:1 — sem tradução de dados."""
+    cap: dict = {}
+    _fake_httpx(monkeypatch, capture=cap, resp=_FakeResp(200, ["x"]))
+    result = fn(*args)
+    assert cap["method"] == method
+    assert cap["url"].endswith(path)
+    assert result == ["x"]
+
+
+def test_list_delivery_processes_filters_by_squad(monkeypatch):
+    cap: dict = {}
+    _fake_httpx(monkeypatch, capture=cap, resp=_FakeResp(200, []))
+    client.list_delivery_processes("s1")
+    assert cap["url"].endswith("/delivery-processes")
+    assert cap["params"] == {"squad_id": "s1"}
+
+
+def test_list_delivery_processes_without_squad_omits_param(monkeypatch):
+    cap: dict = {}
+    _fake_httpx(monkeypatch, capture=cap, resp=_FakeResp(200, []))
+    client.list_delivery_processes()
+    assert cap["params"] is None
+
+
 def test_query_builds_body(monkeypatch):
     cap: dict = {}
     _fake_httpx(monkeypatch, capture=cap, resp=_FakeResp(200, {"answer": "ok"}))

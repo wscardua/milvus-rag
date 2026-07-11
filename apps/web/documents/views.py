@@ -22,21 +22,27 @@ def document_list(request):
         for k in ("squad_id", "delivery_process_id", "delivery_phase", "category_id", "doc_type")
         if request.GET.get(k)
     }
+    tag_filter = request.GET.get("tags") or ""  # select simples (1 tag) nesta listagem — ADR-0015
+    if tag_filter:
+        filters["tags"] = tag_filter
     try:
         page = max(1, int(request.GET.get("page", 1)))
     except ValueError:
         page = 1
     params = {**filters, "limit": PAGE_SIZE, "offset": (page - 1) * PAGE_SIZE}
+    if tag_filter:
+        params["tags"] = [tag_filter]  # API espera lista (Query(list[str])) mesmo p/ 1 valor
     try:
         squads = client.get("/squads")
         categories = client.get("/categories")
         doc_types = client.get("/doc-types")
         phases = client.get("/delivery-phases")
         processes = client.get("/delivery-processes")
+        tags = client.get("/tags")
         docs, total = client.get_paginated("/documents", params=params)
     except client.ApiError as exc:
         messages.error(request, str(exc.detail))
-        squads, categories, doc_types, phases, processes, docs, total = [], [], [], [], [], [], 0
+        squads, categories, doc_types, phases, processes, tags, docs, total = [], [], [], [], [], [], [], 0
 
     squad_names = {s["id"]: s["name"] for s in squads}
     cat_names = {c["id"]: c["name"] for c in categories}
@@ -59,6 +65,7 @@ def document_list(request):
             "doc_types": doc_types,
             "phases": phases,
             "processes": processes,
+            "tags": tags,
             "filters": filters,
             "page": page,
             "total": total,
@@ -139,13 +146,15 @@ def document_detail(request, document_id):
                 client.patch(f"/documents/{document_id}", json=payload)
                 messages.success(request, "Classificação salva.")
             elif action == "save_delivery":
-                # Metadados de ciclo de entrega (ADR-0014) — não alteram classification_source
+                # Metadados de entrada do usuário (ADR-0007/0014) — não alteram classification_source
+                tags_raw = request.POST.get("tags", "")
                 payload = {
                     "delivery_phase": request.POST.get("delivery_phase") or None,
                     "valid_until": request.POST.get("valid_until") or None,
+                    "tags": [t.strip() for t in tags_raw.split(",") if t.strip()],
                 }
                 client.patch(f"/documents/{document_id}", json=payload)
-                messages.success(request, "Fase/vigência salvas.")
+                messages.success(request, "Fase/vigência/tags salvas.")
             elif action == "add_link":
                 client.post(
                     f"/documents/{document_id}/links",

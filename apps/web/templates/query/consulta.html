@@ -15,13 +15,29 @@
     <div class="field"><label>Squad (opcional)</label>
       <select class="select" name="squad"><option value="">Todas</option>
         {% for s in squads %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Processo de delivery (opcional)</label>
+      <select class="select" name="delivery_process"><option value="">Todos</option>
+        {% for p in processes %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
     <div class="field"><label>Categoria (opcional)</label>
       <select class="select" name="category"><option value="">Todas</option>
         {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
     <div class="field"><label>doc_type (opcional)</label>
       <select class="select" name="doc_type"><option value="">Todos</option>
         {% for t in doc_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}</select></div>
+    <div class="field"><label>Fase de delivery (opcional)</label>
+      <select class="select" name="delivery_phase"><option value="">Todas</option>
+        {% for ph in phases %}<option value="{{ ph }}">{{ ph }}</option>{% endfor %}</select></div>
   </div>
+  {% if tags %}
+  <div class="field">
+    <label>Tags (opcional — qualquer uma das marcadas)</label>
+    <div class="tag-checks">
+      {% for tg in tags %}
+        <label class="tag-check"><input type="checkbox" name="tags" value="{{ tg }}"> {{ tg }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <button class="btn btn--primary" type="submit">Perguntar</button>
 </form>
 

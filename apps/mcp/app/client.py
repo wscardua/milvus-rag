@@ -62,6 +62,8 @@ def list_documents(filters: dict | None = None) -> list:
         "delivery_process": "delivery_process_id",
         "category": "category_id",
         "doc_type": "doc_type",
+        "delivery_phase": "delivery_phase",  # ADR-0015
+        "tags": "tags",  # ADR-0015 — lista; httpx envia como múltiplos ?tags=
         "limit": "limit",
         "offset": "offset",
     }
@@ -72,3 +74,38 @@ def list_documents(filters: dict | None = None) -> list:
 def get_document(document_id: str) -> dict:
     """GET /documents/{id} → metadados + estado de ingestão."""
     return _request("GET", f"/documents/{document_id}")
+
+
+# --- Tools de lookup (WORK-010) — proxy fino dos GETs de organization-admin ---
+# Para o agente resolver nome→id antes de filtrar squad/delivery_process nas tools de consulta.
+
+
+def list_squads() -> list:
+    """GET /squads → squads cadastradas."""
+    return _request("GET", "/squads")
+
+
+def list_delivery_processes(squad_id: str | None = None) -> list:
+    """GET /delivery-processes?squad_id= → processos de delivery, filtrável por squad."""
+    params = {"squad_id": squad_id} if squad_id else None
+    return _request("GET", "/delivery-processes", params=params)
+
+
+def list_categories() -> list:
+    """GET /categories → categorias da taxonomia."""
+    return _request("GET", "/categories")
+
+
+def list_doc_types() -> list:
+    """GET /doc-types → lista fechada de doc_type."""
+    return _request("GET", "/doc-types")
+
+
+def list_delivery_phases() -> list:
+    """GET /delivery-phases → lista fechada de fases de delivery (ADR-0014/0015)."""
+    return _request("GET", "/delivery-phases")
+
+
+def list_tags() -> list:
+    """GET /tags → tags distintas já usadas no acervo (ADR-0015)."""
+    return _request("GET", "/tags")

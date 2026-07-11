@@ -29,6 +29,10 @@
       <option value="">Todos os tipos</option>
       {% for t in doc_types %}<option value="{{ t }}" {% if filters.doc_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
     </select>
+    <select class="select" name="tags" onchange="this.form.submit()">
+      <option value="">Todas as tags</option>
+      {% for tg in tags %}<option value="{{ tg }}" {% if filters.tags == tg %}selected{% endif %}>{{ tg }}</option>{% endfor %}
+    </select>
     <a class="btn btn--ghost btn--sm" href="{% url 'document_list' %}">Limpar</a>
   </form>
 </div>

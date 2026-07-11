@@ -12,21 +12,32 @@ from app.config import settings
 from app.db.models import Chunk, Document, DocumentLink
 from app.services import embeddings, llm, vectorstore
 
-# filtros da UI/contrato → campos do payload no Milvus
+# filtros da UI/contrato → campos escalares do payload no Milvus (igualdade)
 _FILTER_MAP = {
     "squad": "squad_id",
     "delivery_process": "delivery_process_id",
     "category": "category_id",
     "doc_type": "doc_type",
+    "delivery_phase": "delivery_phase",  # ADR-0015, campo dinâmico
 }
 _EXPAND_TYPES = ("esclarece", "complementa", "precede")  # 'substitui' é excluído (ADR-0008)
 _MAX_EXPAND_PER_DOC = 3
 
 
 def _map_filters(filters: dict | None) -> dict:
+    """Traduz `filters` do contrato para o dict aceito por `vectorstore.search`.
+
+    Campos escalares (`_FILTER_MAP`) mapeiam 1:1 por igualdade. `tags` (ADR-0015) é a
+    exceção: é uma lista, não um escalar, e passa adiante como lista — `vectorstore.search`
+    monta a expressão OR de LIKE a partir dela.
+    """
     out = {}
     for k, v in (filters or {}).items():
-        if v and k in _FILTER_MAP:
+        if not v:
+            continue
+        if k == "tags":
+            out["tags"] = list(v)
+        elif k in _FILTER_MAP:
             out[_FILTER_MAP[k]] = v
     return out
 

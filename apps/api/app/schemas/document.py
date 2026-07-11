@@ -31,6 +31,8 @@ class DocumentUpdate(BaseModel):
     # Ciclo de entrega (ADR-0014) — entrada do usuário, não altera classification_source
     delivery_phase: str | None = Field(default=None, max_length=60)
     valid_until: date | None = None
+    # Entrada do usuário desde o upload (ADR-0007) — editável agora (WORK-010); [] limpa todas
+    tags: list[str] | None = None
 
 
 class DocumentOut(BaseModel):
