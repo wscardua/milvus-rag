@@ -24,9 +24,10 @@ Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /document
 
 ## Edição de classificação (overrides) — ADR-0007
 
-- `PATCH /documents/{id}` → altera os campos **sugeridos pela IA e editáveis pelo usuário**: `title`, `category_id`, `subcategory_id`, `summary`, e também `delivery_phase`/`valid_until` (ADR-0014, entrada do usuário).
-- A API marca `classification_source = user` quando há override de **classificação** (`title`/`category`/`subcategory`/`summary`). Editar apenas `delivery_phase`/`valid_until` **não** altera `classification_source` (não fazem parte da classificação temática da IA).
-- `subcategory_id` deve pertencer à `category_id` informada (taxonomia). `delivery_phase` inválida ou `valid_until` não-ISO → `422`.
+- `PATCH /documents/{id}` → altera os campos **sugeridos pela IA e editáveis pelo usuário**: `title`, `category_id`, `subcategory_id`, `summary`, e também `delivery_phase`/`valid_until` (ADR-0014) e `tags[]` (ADR-0007, editável desde WORK-010 — antes só existia no upload) — todos entrada do usuário.
+- A API marca `classification_source = user` quando há override de **classificação** (`title`/`category`/`subcategory`/`summary`). Editar `delivery_phase`/`valid_until`/`tags` **não** altera `classification_source` (não fazem parte da classificação temática da IA).
+- `subcategory_id` deve pertencer à `category_id` informada (taxonomia). `delivery_phase` inválida ou `valid_until` não-ISO → `422`. `tags: []` limpa todas as tags do documento; a lista enviada **substitui** a anterior (não é incremental); valores são normalizados (trim, vazios descartados).
+- **Sincronização com o Milvus (ADR-0015):** editar `category_id` (campo declarado) ou `delivery_phase`/`tags` (campos dinâmicos) de um documento **já indexado** resincroniza os chunks existentes no Milvus (`vectorstore.sync_document_fields`, sem reembeder/reextrair) — a edição de metadado não pode deixar o índice desatualizado. A sincronização acontece antes do commit no Postgres; se falhar, o `PATCH` falha inteiro.
 - Gestão de vínculos do documento é feita pelo contrato `document-links` (ADR-0008).
 
 ## Estado / listagem

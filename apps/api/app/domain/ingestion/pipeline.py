@@ -113,17 +113,22 @@ def ingest_document(session: Session, doc: Document) -> IngestStats:
                 token_count=token_counts[ordinal],  # já calculado acima; evita re-split
             )
         )
-        rows.append(
-            {
-                "chunk_id": cid.hex,
-                "vector": vector,
-                "document_id": doc_id,
-                "squad_id": squad_id,
-                "delivery_process_id": str(doc.delivery_process_id),
-                "category_id": str(doc.category_id) if doc.category_id else "",
-                "doc_type": doc.doc_type or "",
-            }
-        )
+        row = {
+            "chunk_id": cid.hex,
+            "vector": vector,
+            "document_id": doc_id,
+            "squad_id": squad_id,
+            "delivery_process_id": str(doc.delivery_process_id),
+            "category_id": str(doc.category_id) if doc.category_id else "",
+            "doc_type": doc.doc_type or "",
+        }
+        # campos dinâmicos (ADR-0015) — só entram no payload quando o documento tem valor
+        # (omitir em vez de gravar vazio: "sem campo" é o estado esperado p/ filtro não bater)
+        if doc.delivery_phase:
+            row["delivery_phase"] = doc.delivery_phase
+        if doc.tags:
+            row["tags"] = vectorstore.serialize_tags(doc.tags)
+        rows.append(row)
     vectorstore.upsert_chunks(rows)
     doc.ingested_at = datetime.now(timezone.utc)
 

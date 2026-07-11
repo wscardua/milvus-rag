@@ -32,13 +32,12 @@
     <div class="field-static"><label>Processo</label><div><span class="tag tag--blue">{{ doc.process_name }}</span></div></div>
     <div class="field-static"><label>Autor</label><div>{{ doc.author|default:"—" }}</div></div>
     <div class="field-static"><label>doc_type</label><div>{{ doc.doc_type|default:"—" }}</div></div>
-    <div class="field-static"><label>Tags</label><div>{% for t in doc.tags %}<span class="tag">{{ t }}</span> {% empty %}—{% endfor %}</div></div>
   </div>
 </div>
 
 <form method="post" class="tile">
   <input type="hidden" name="action" value="save_delivery">
-  <h3>Ciclo de entrega <span class="ai-hint" style="margin:0">entrada do usuário</span></h3>
+  <h3>Ciclo de entrega e tags <span class="ai-hint" style="margin:0">entrada do usuário</span></h3>
   <div class="row">
     <div class="field">
       <label>Fase de delivery</label>
@@ -52,8 +51,13 @@
       <input class="input" type="date" name="valid_until" value="{{ doc.valid_until|default:'' }}">
       <div class="helper">Após esta data, o documento é rebaixado no retrieval (não excluído).</div>
     </div>
+    <div class="field">
+      <label>Tags</label>
+      <input class="input" name="tags" value="{{ doc.tags|join:', ' }}" placeholder="segurança, 2026">
+      <div class="helper">Separadas por vírgula. Salvar aqui substitui a lista inteira (não é incremental).</div>
+    </div>
   </div>
-  <button class="btn btn--primary" type="submit">Salvar fase/vigência</button>
+  <button class="btn btn--primary" type="submit">Salvar fase/vigência/tags</button>
 </form>
 
 <form method="post" class="tile">

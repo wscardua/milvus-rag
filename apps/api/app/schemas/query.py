@@ -8,7 +8,9 @@ from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
     question: str
-    filters: dict | None = None  # squad, delivery_process, category, doc_type
+    # squad, delivery_process, category, doc_type (str); delivery_phase (str, ADR-0015);
+    # tags (list[str], ADR-0015 — semântica OR)
+    filters: dict | None = None
     top_k: int | None = None
 
 
@@ -41,7 +43,7 @@ class FeedbackRequest(BaseModel):
 # --- Retrieval puro (sem geração) — FEAT-MCP-001 / ADR-0005 ---
 class RetrieveRequest(BaseModel):
     question: str
-    filters: dict | None = None  # mesmos filtros de /query
+    filters: dict | None = None  # mesmos filtros de /query (inclui delivery_phase/tags, ADR-0015)
     top_k: int | None = None
 
 

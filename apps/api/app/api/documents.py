@@ -6,7 +6,7 @@ import os
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -104,6 +104,7 @@ def list_documents(
     delivery_phase: str | None = None,  # ADR-0014 (filtro no Postgres, não no Milvus)
     category_id: uuid.UUID | None = None,
     doc_type: str | None = None,
+    tags: list[str] | None = Query(None),  # ADR-0015 — OR (overlap), mesma semântica do Milvus
     limit: int = 50,
     offset: int = 0,
     session: Session = Depends(get_session),
@@ -121,6 +122,9 @@ def list_documents(
         stmt = stmt.where(Document.category_id == category_id)
     if doc_type:
         stmt = stmt.where(Document.doc_type == doc_type)
+    if tags:
+        # overlap (&&) usa o índice GIN existente (ADR-0007) — hit com qualquer uma das tags pedidas
+        stmt = stmt.where(Document.tags.overlap(tags))
 
     # Total do recorte (sem paginação) → X-Total-Count para a UI paginar (contrato upload-and-metadata)
     total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -130,6 +134,13 @@ def list_documents(
         stmt.order_by(Document.created_at.desc()).limit(min(limit, 200)).offset(offset)
     ).all()
     return [to_document_out(session, d) for d in docs]
+
+
+@router.get("/tags", response_model=list[str])
+def list_tags(session: Session = Depends(get_session)):
+    """Tags distintas já usadas no acervo (ADR-0015) — popula dropdown/tool (`list_tags` no MCP)."""
+    stmt = select(func.unnest(Document.tags)).distinct()
+    return sorted(session.execute(stmt).scalars().all())
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)
@@ -158,6 +169,8 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
         eff_cat = data.get("category_id", doc.category_id)
         if eff_cat is not None and sub.category_id != eff_cat:
             raise HTTPException(422, "Subcategoria não pertence à categoria informada.")
+    if data.get("delivery_phase") == "":
+        data["delivery_phase"] = None  # "" e null são equivalentes: "sem fase" (limpa o campo)
     if data.get("delivery_phase") is not None and data["delivery_phase"] not in DELIVERY_PHASES:
         raise HTTPException(422, f"delivery_phase inválida. Use uma de {DELIVERY_PHASES}.")
 
@@ -165,12 +178,41 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
     if "category_id" in data and "subcategory_id" not in data:
         doc.subcategory_id = None
 
+    if "tags" in data:
+        data["tags"] = [t.strip() for t in (data["tags"] or []) if t and t.strip()]
+        # vírgula é o delimitador usado ao serializar tags pro payload dinâmico do Milvus
+        # (vectorstore.serialize_tags) — uma tag com vírgula literal ficaria indistinguível
+        # de duas tags separadas (",foo,bar," seria igual pra "foo,bar" e para "foo"+"bar").
+        if any("," in t for t in data["tags"]):
+            raise HTTPException(422, "Tags não podem conter vírgula.")
+
+    # Campos editados aqui que também vivem no payload do Milvus (ADR-0007/0015) precisam
+    # ser resincronizados nos chunks já indexados — o PATCH só grava no Postgres por padrão
+    # e o payload do índice ficaria obsoleto sem isso. `category_id` é campo declarado (nunca
+    # pode ficar ausente da linha → "" quando limpo); `delivery_phase`/`tags` são campos
+    # dinâmicos (`None` remove o campo). `title`/`subcategory_id`/`summary`/`valid_until` não
+    # estão no payload do Milvus — nada a sincronizar para eles.
+    milvus_fields: dict = {}
+    if "category_id" in data:
+        milvus_fields["category_id"] = str(data["category_id"]) if data["category_id"] else ""
+    if "delivery_phase" in data:
+        milvus_fields["delivery_phase"] = data["delivery_phase"] or None
+    if "tags" in data:
+        milvus_fields["tags"] = vectorstore.serialize_tags(data["tags"]) if data["tags"] else None
+
     for field, value in data.items():
         setattr(doc, field, value)
     # Override de classificação (ADR-0007) marca classification_source=user; editar só
-    # delivery_phase/valid_until (entrada do usuário — ADR-0014) NÃO altera classification_source.
+    # delivery_phase/valid_until/tags (entrada do usuário — ADR-0007/0014) NÃO altera
+    # classification_source.
     if data.keys() & {"title", "category_id", "subcategory_id", "summary"}:
         doc.classification_source = "user"
+
+    # Milvus antes do Postgres (mesma ordem de segurança do DELETE, ADR-0010): se a
+    # sincronização falhar, o PATCH falha inteiro em vez de deixar Postgres/Milvus divergentes.
+    if milvus_fields:
+        vectorstore.sync_document_fields(str(doc.id), milvus_fields)
+
     session.commit()
     session.refresh(doc)
     return to_document_out(session, doc)

@@ -9,11 +9,14 @@ from core import client
 
 
 def consulta(request):
-    squads = categories = doc_types = []
+    squads = categories = doc_types = processes = phases = tags = []
     try:
         squads = client.get("/squads")
         categories = client.get("/categories")
         doc_types = client.get("/doc-types")
+        processes = client.get("/delivery-processes")  # ADR-0007, WORK-010 (Fase 1)
+        phases = client.get("/delivery-phases")  # ADR-0015 (Fase 2)
+        tags = client.get("/tags")  # ADR-0015 (Fase 2)
     except client.ApiError as exc:
         messages.error(request, str(exc.detail))
 
@@ -23,9 +26,12 @@ def consulta(request):
         question = request.POST.get("question", "").strip()
         filters = {
             k: request.POST.get(k)
-            for k in ("squad", "delivery_process", "category", "doc_type")
+            for k in ("squad", "delivery_process", "category", "doc_type", "delivery_phase")
             if request.POST.get(k)
         }
+        selected_tags = request.POST.getlist("tags")  # multi-seleção → OR (ADR-0015)
+        if selected_tags:
+            filters["tags"] = selected_tags
         payload = {"question": question, "filters": filters or None, "top_k": 5}
         try:
             result = client.post("/query", json=payload)
@@ -42,6 +48,9 @@ def consulta(request):
             "squads": squads,
             "categories": categories,
             "doc_types": doc_types,
+            "processes": processes,
+            "phases": phases,
+            "tags": tags,
             "result": result,
             "question": question,
             "nav": "consulta",

@@ -21,6 +21,14 @@ Entre Django (UI de admin) e FastAPI. Introduzido por ADR-0007. Sustenta as tela
 - `GET /categories` → lista de categorias (`id`, `name`).
 - `GET /categories/{id}/subcategories` (ou `GET /subcategories?category_id=`) → subcategorias da categoria — alimenta os selects dependentes.
 
+## Listas de apoio (lookup, leitura)
+
+Listas fechadas/derivadas usadas para popular selects e resolver nome→id antes de filtrar (UI de Documentos/Consulta e tools do MCP, WORK-010):
+
+- `GET /doc-types` → lista fechada de `doc_type` (`reference/taxonomy.md`).
+- `GET /delivery-phases` → lista fechada de fases de delivery (ADR-0014, `reference/taxonomy.md`).
+- `GET /tags` (ADR-0015) → tags distintas já usadas no acervo (`SELECT DISTINCT unnest(tags)`), para popular o campo de tag da UI/tool sem exigir digitação livre às cegas.
+
 ## Regras
 
 - `delivery_process` sempre pertence a uma `squad`; `subcategory` sempre a uma `category`.

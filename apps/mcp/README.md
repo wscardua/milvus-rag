@@ -24,6 +24,8 @@ ajuste `MCP_TRANSPORT` no `.env` (evolução futura — a POC é local, sem auth
 
 ## Tools
 
+### Consulta
+
 | Tool | Chamada na API | Retorno |
 |---|---|---|
 | `search_documents(question, filters?, top_k?)` | `POST /query` | resposta gerada + `citations` + `linked_flow` |
@@ -31,9 +33,24 @@ ajuste `MCP_TRANSPORT` no `.env` (evolução futura — a POC é local, sem auth
 | `list_documents(filters?)` | `GET /documents` | acervo por categoria/metadado |
 | `get_document(id)` | `GET /documents/{id}` | metadados + estado de ingestão |
 
-`filters` aceita `squad`, `delivery_process`, `category`, `doc_type`
-(`list_documents` também aceita `limit`/`offset`). Obs.: `tags` **não** é filtro
-de retrieval na POC (o Milvus não indexa `tags`) — ver Lacunas no `status.md`.
+`filters` (dict, opcional) aceita:
+- `squad`, `delivery_process`, `category` — **UUID**, não o nome. Resolva com as tools de lookup abaixo antes de filtrar.
+- `doc_type`, `delivery_phase` — string, lista fechada (`list_doc_types`/`list_delivery_phases`).
+- `tags` (ADR-0015) — lista de strings, semântica **OR**: documento com qualquer uma das tags pedidas entra no resultado (não precisa ter todas). Veja os valores existentes com `list_tags`.
+- `list_documents` também aceita `limit`/`offset`.
+
+### Lookup (WORK-010)
+
+Para o agente resolver **nome→id** (ou ver os valores válidos de um campo fechado) antes de montar `filters` nas tools acima — sem isso, não há como filtrar por `squad`/`delivery_process` (a API exige UUID, não o nome):
+
+| Tool | Chamada na API | Retorno |
+|---|---|---|
+| `list_squads()` | `GET /squads` | squads cadastradas |
+| `list_delivery_processes(squad_id?)` | `GET /delivery-processes` | processos de delivery, filtrável por squad |
+| `list_categories()` | `GET /categories` | categorias da taxonomia |
+| `list_doc_types()` | `GET /doc-types` | lista fechada de `doc_type` |
+| `list_delivery_phases()` | `GET /delivery-phases` | lista fechada de fases de delivery |
+| `list_tags()` | `GET /tags` | tags distintas já usadas no acervo |
 
 Com a API fora do ar, as tools retornam **erro explícito** ao agente (não inventam resposta).
 

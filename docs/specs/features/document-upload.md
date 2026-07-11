@@ -1,15 +1,15 @@
 ---
 id: FEAT-UPLOAD-001
 title: Upload e Metadados de Documento
-version: 0.6.0
+version: 0.7.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
-updated: 2026-07-10
+updated: 2026-07-11
 contracts: [upload-and-metadata, document-links]
 depends_on: []
-adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008, ADR-0010, ADR-0013, ADR-0014]
+adrs: [ADR-0001, ADR-0002, ADR-0007, ADR-0008, ADR-0010, ADR-0013, ADR-0014, ADR-0015]
 ---
 
 # Feature — Upload e Metadados de Documento
@@ -61,6 +61,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - A UI não processa conteúdo; apenas envia via contrato.
 - Metadados são normalizados pela API antes de persistir.
 - Upload trata o arquivo como entrada não confiável (tipo/tamanho validados; conteúdo só é processado na ingestão).
+- `PATCH /documents/{id}` que edita um campo presente no payload do Milvus (`category_id`, ADR-0007; `delivery_phase`, ADR-0015) **resincroniza os chunks já indexados** (`vectorstore.sync_document_fields`, sem reembeder/reextrair) — a edição de metadado não pode deixar o índice obsoleto. Sincronização acontece antes do commit no Postgres (mesma ordem de segurança do `DELETE`, ADR-0010): se falhar, o `PATCH` falha inteiro em vez de deixar Postgres/Milvus divergentes.
 
 ## 7. Contratos e integrações
 - Contratos: `upload-and-metadata` (`POST /documents`, `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/file`, `DELETE /documents/{id}`) e `document-links` (vínculos iniciais, ADR-0008).
@@ -96,7 +97,7 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 - ADR-0001 (stack). A ingestão em si é FEAT-INGEST-001.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack da POC. ADR-0002 — formatos (rev. 2026-07-10: +PPTX/`.ipynb`/imagens). ADR-0007 — vínculo obrigatório squad/processo e título opcional (IA sugere). ADR-0008 — vínculos iniciais entre documentos. ADR-0010 — exclusão (cascade + Milvus + arquivo) e acesso ao arquivo (view/download via proxy). ADR-0014 — `delivery_phase` e `valid_until` (metadados de ciclo de entrega).
+- ADR-0001 — stack da POC. ADR-0002 — formatos (rev. 2026-07-10: +PPTX/`.ipynb`/imagens). ADR-0007 — vínculo obrigatório squad/processo e título opcional (IA sugere). ADR-0008 — vínculos iniciais entre documentos. ADR-0010 — exclusão (cascade + Milvus + arquivo) e acesso ao arquivo (view/download via proxy). ADR-0014 — `delivery_phase` e `valid_until` (metadados de ciclo de entrega). ADR-0015 — payload dinâmico do Milvus; `PATCH` resincroniza `category_id`/`delivery_phase`/`tags` nos chunks já indexados (WORK-010).
 
 ## 14. Pendências e questões em aberto
 - Definir limite máximo de tamanho de arquivo (tipos já fixados em ADR-0002).
@@ -104,6 +105,8 @@ Sem uma entrada estruturada de documentos e metadados, não há o que ingerir ne
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-11 | 0.7.0 | - | `tags` passa a ser editável via `PATCH /documents/{id}` (antes só existia no upload) — normalizada (trim/vazios descartados), `[]` limpa; substitui a lista inteira, não é incremental. Não altera `classification_source`. Sincroniza com o Milvus (campo dinâmico, ADR-0015) igual `category_id`/`delivery_phase`. UI: form "Ciclo de entrega e tags" no detalhe do documento | WORK-010, ADR-0007, ADR-0015 |
+| 2026-07-11 | 0.6.1 | - | Fix: `PATCH /documents/{id}` deixava o payload do Milvus obsoleto ao editar `category_id`/`delivery_phase` de documento já indexado (achado em teste manual). `vectorstore.sync_document_fields` resincroniza os chunks sem reembeder; sincroniza antes do commit no Postgres | WORK-010, ADR-0015 |
 | 2026-07-10 | 0.6.0 | - | `delivery_phase` e `valid_until` opcionais; novos formatos (PPTX/`.ipynb`/imagens) | WORK-007, ADR-0014, ADR-0002 (rev.) |
 | 2026-07-10 | 0.5.0 | - | doc_type obrigatório no upload (orienta o perfil de chunking na ingestão) | WORK-006, ADR-0013 |
 | 2026-07-09 | 0.4.0 | - | Exclusão de documento (hard delete: chunks+vetores+arquivo) e visualização/download do arquivo (via proxy) | WORK-003, ADR-0010 |
