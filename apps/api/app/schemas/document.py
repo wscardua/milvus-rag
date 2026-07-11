@@ -22,6 +22,12 @@ class LinkOut(BaseModel):
     ordinal: int | None = None
 
 
+class LinksSummary(BaseModel):
+    """Agregado leve de vínculos (ADR-0008) para a listagem — sem trazer os links completos."""
+    count: int = 0
+    types: list[str] = []
+
+
 class DocumentUpdate(BaseModel):
     """PATCH /documents/{id} — overrides de classificação (ADR-0007) + metadados de entrega (ADR-0014)."""
     title: str | None = Field(default=None, max_length=500)
@@ -55,5 +61,6 @@ class DocumentOut(BaseModel):
     classification_source: str | None = None
     ingested_at: datetime | None = None
     status: str  # do ingestion_job mais recente
+    links_summary: LinksSummary = LinksSummary()  # ADR-0008 (WORK-011)
     created_at: datetime
     updated_at: datetime

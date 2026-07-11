@@ -1,12 +1,12 @@
 ---
 id: FEAT-WEB-001
 title: Layout do Frontend (UI Django)
-version: 0.5.0
+version: 0.6.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
-updated: 2026-07-10
+updated: 2026-07-11
 contracts: [upload-and-metadata, query-and-citations, organization-admin, document-links, logs-and-health]
 depends_on: [FEAT-UPLOAD-001, FEAT-INGEST-001, FEAT-QUERY-001]
 adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008, ADR-0010, ADR-0011, ADR-0014]
@@ -25,7 +25,7 @@ As specs de domínio (upload, ingestão, consulta) existem, mas não há camada 
 ## 3. Escopo
 ### Incluído
 - **Shell/layout base:** header de navegação (Carbon UI Shell), área de mensagens/notificações, identidade visual IBM Plex + tokens Carbon.
-- **Tela Documentos (listagem):** tabela com título, squad/processo, categoria (sugerida por IA), `status` (badge), data de ingestão, **fase de delivery** e **vigência (`valid_until`)**; filtros por squad, **processo (ADR-0007)**, **fase de delivery (ADR-0014)**, categoria, `doc_type`, `status`; **paginação funcional** (limit/offset + total via cabeçalho `X-Total-Count`; controles anterior/próxima). Atualização de `status` por **polling** de `GET /documents`.
+- **Tela Documentos (listagem):** tabela com título, squad/processo, categoria (sugerida por IA), `status` (badge), **vínculos** (badge "🔗 N" a partir de `links_summary` — WORK-011, ADR-0008; clicável, leva à seção "Fluxo de documentos vinculados" do Detalhe; destacado quando há vínculo do tipo `substitui`, sinalizando possível conteúdo obsoleto já na listagem), data de ingestão, **fase de delivery** e **vigência (`valid_until`)**; filtros por squad, **processo (ADR-0007)**, **fase de delivery (ADR-0014)**, categoria, `doc_type`, `status`; **paginação funcional** (limit/offset + total via cabeçalho `X-Total-Count`; controles anterior/próxima). Atualização de `status` por **polling** de `GET /documents`.
 - **Tela Upload:** seleção obrigatória de **Squad** e **Processo de Delivery** (selects dependentes); arquivo; `title` **opcional** (IA sugere); `author`, `doc_type`, `tags`; **`delivery_phase`** (select da lista fechada, opcional) e **`valid_until`** (data, opcional) — ADR-0014; **vínculos iniciais opcionais** a documentos da mesma squad (tipo + alvo).
 - **Tela Detalhe:** vínculo (squad/processo) + metadados do usuário; bloco **Título, classificação & resumo** com `title`, `category`/`subcategory` (selects de enum dependentes) e `summary` — **pré-preenchidos com a sugestão da IA e editáveis** (salvar overrides); **`delivery_phase`** e **`valid_until`** editáveis (ADR-0014); **seção "Fluxo de documentos vinculados"** (adicionar/remover vínculos tipados da mesma squad; `substitui` marcado como excluído da busca); exibição de `error` quando `failed`. **Ações do documento (ADR-0010):** **Visualizar** (modal com `<iframe>` para PDF/TXT/MD/HTML), **Baixar** (arquivo original) e **Excluir** (com confirmação — remove chunks/vetores/arquivo).
 - **Tela Consulta:** pergunta, filtros **opcionais** por squad/processo/categoria/`doc_type`, `top_k` (avançado, default 5); exibição da resposta com **citações** (snippet, documento, score), o **fluxo de documentos relacionados** (`linked_flow[]`) e o estado "sem contexto suficiente". **Feedback 👍/👎 (ADR-0011)** da resposta (via fetch; opcional).
@@ -151,6 +151,7 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-11 | 0.6.0 | - | Badge de vínculos (`links_summary`, "🔗 N") na listagem de Documentos, com destaque para vínculo `substitui`; leva à seção de vínculos do Detalhe | WORK-011, ADR-0008 |
 | 2026-07-10 | 0.5.0 | - | Paginação funcional (Documentos+Logs); filtro por processo e por fase de delivery na listagem; `delivery_phase`/`valid_until` no Upload/Detalhe; novos formatos no Upload | WORK-007, ADR-0014, ADR-0002 (rev.) |
 | 2026-07-09 | 0.4.0 | - | 7ª tela (Logs & Saúde); Detalhe ganha Visualizar/Baixar/Excluir; feedback 👍/👎 na Consulta; contrato `logs-and-health`. Spec aprovada | WORK-003, ADR-0010, ADR-0011 |
 | 2026-07-09 | 0.3.0 | - | Título opcional/sugerido pela IA (editável); vínculos entre documentos no Detalhe/Upload; fluxo (`linked_flow[]`) na Consulta; contrato `document-links` | ADR-0007, ADR-0008 |

@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Document, IngestionJob
-from app.schemas.document import DocumentOut
+from app.db.models import Document, DocumentLink, IngestionJob
+from app.schemas.document import DocumentOut, LinksSummary
 
 
 def document_status(session: Session, document_id: uuid.UUID) -> str:
@@ -21,7 +21,32 @@ def document_status(session: Session, document_id: uuid.UUID) -> str:
     return job.state if job else "pending"
 
 
-def to_document_out(session: Session, doc: Document) -> DocumentOut:
+def fetch_links_summary(session: Session, document_ids: list[uuid.UUID]) -> dict[uuid.UUID, LinksSummary]:
+    """Agregado (count + tipos) de vínculos por documento, em 1 query — evita N+1 na listagem.
+
+    Bidirecional (ADR-0008): conta vínculos onde o documento é origem ou alvo, mesma
+    semântica de `list_links` (apps/api/app/api/links.py).
+    """
+    if not document_ids:
+        return {}
+    id_set = set(document_ids)
+    rows = session.execute(
+        select(DocumentLink.source_document_id, DocumentLink.target_document_id, DocumentLink.link_type).where(
+            or_(DocumentLink.source_document_id.in_(document_ids), DocumentLink.target_document_id.in_(document_ids))
+        )
+    ).all()
+    counts: dict[uuid.UUID, int] = {}
+    types: dict[uuid.UUID, set[str]] = {}
+    for source_id, target_id, link_type in rows:
+        for doc_id in {source_id, target_id} & id_set:
+            counts[doc_id] = counts.get(doc_id, 0) + 1
+            types.setdefault(doc_id, set()).add(link_type)
+    return {doc_id: LinksSummary(count=count, types=sorted(types[doc_id])) for doc_id, count in counts.items()}
+
+
+def to_document_out(session: Session, doc: Document, links_summary: LinksSummary | None = None) -> DocumentOut:
+    if links_summary is None:
+        links_summary = fetch_links_summary(session, [doc.id]).get(doc.id, LinksSummary())
     return DocumentOut(
         id=doc.id,
         delivery_process_id=doc.delivery_process_id,
@@ -41,6 +66,7 @@ def to_document_out(session: Session, doc: Document) -> DocumentOut:
         classification_source=doc.classification_source,
         ingested_at=doc.ingested_at,
         status=document_status(session, doc.id),
+        links_summary=links_summary,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
     )

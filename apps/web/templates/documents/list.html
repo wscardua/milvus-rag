@@ -37,7 +37,7 @@
   </form>
 </div>
 <table>
-  <thead><tr><th>Título</th><th>Squad / Processo</th><th>Categoria</th><th>Fase</th><th>Vigência</th><th>Status</th><th>Ingerido em</th></tr></thead>
+  <thead><tr><th>Título</th><th>Squad / Processo</th><th>Categoria</th><th>Fase</th><th>Vigência</th><th>Status</th><th>Vínculos</th><th>Ingerido em</th></tr></thead>
   <tbody>
     {% for d in documents %}
     <tr class="clickable" onclick="location.href='{% url 'document_detail' document_id=d.id %}'">
@@ -48,10 +48,18 @@
       <td>{{ d.delivery_phase|default:"—" }}</td>
       <td class="mono">{{ d.valid_until|default:"—" }}</td>
       <td><span class="badge badge--{{ d.status }}">{{ d.status }}</span></td>
+      <td>
+        {% if d.links_summary.count %}
+        <a class="link-badge{% if 'substitui' in d.links_summary.types %} link-badge--substitui{% endif %}"
+           href="{% url 'document_detail' document_id=d.id %}#vinculos"
+           title="{{ d.links_summary.types|join:', ' }}{% if 'substitui' in d.links_summary.types %} — inclui vínculo de substituição, verifique a versão vigente{% endif %}"
+           onclick="event.stopPropagation();">🔗 {{ d.links_summary.count }}</a>
+        {% else %}—{% endif %}
+      </td>
       <td class="mono">{% if d.ingested_at %}{{ d.ingested_at|slice:":16" }}{% else %}—{% endif %}</td>
     </tr>
     {% empty %}
-    <tr><td colspan="7" class="empty">Nenhum documento. <a href="{% url 'upload' %}">Enviar o primeiro</a>.</td></tr>
+    <tr><td colspan="8" class="empty">Nenhum documento. <a href="{% url 'upload' %}">Enviar o primeiro</a>.</td></tr>
     {% endfor %}
   </tbody>
 </table>

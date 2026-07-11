@@ -35,6 +35,7 @@ Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /document
 - `GET /documents/{id}` → `document_id`, `status`, `metadata` (squad/processo, `category`/`subcategory`/`summary`, `classification_source`, `delivery_phase`, `valid_until`, `ingested_at`), `error?`, timestamps.
 - `GET /documents?filtro` → lista paginada com filtros por metadado: `squad_id`, `delivery_process_id`, `delivery_phase` (ADR-0014), `category_id`, `doc_type`, `status`.
   - **Paginação:** `limit` (default 50, máx 200) e `offset` (default 0). O total de itens do recorte (sem paginação) vem no cabeçalho de resposta **`X-Total-Count`**; o corpo permanece uma **lista** de documentos (retrocompatível). A UI usa o total para os controles de página.
+  - **`links_summary`** (WORK-011, ADR-0008): cada item da lista traz `{"count": int, "types": [link_type, ...]}` — agregado **bidirecional** (conta vínculos onde o documento é origem ou alvo, mesmo critério de `GET /documents/{id}/links`) calculado em 1 query por página (sem N+1). `types` é a lista deduplicada dos `link_type` presentes. Objetivo: sinalizar vínculo já na listagem sem trazer o payload completo (isso continua exclusivo de `GET /documents/{id}/links`, contrato `document-links`).
 
 ## Acesso ao arquivo — ADR-0010
 
