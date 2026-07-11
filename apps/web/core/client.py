@@ -13,6 +13,14 @@ class ApiError(Exception):
 
 
 def _request(method: str, path: str, **kwargs):
+    resp = _raw_request(method, path, **kwargs)
+    if resp.status_code == 204 or not resp.content:
+        return None
+    return resp.json()
+
+
+def _raw_request(method: str, path: str, **kwargs):
+    """Executa a requisição e devolve a resposta bruta (para ler headers, ex.: X-Total-Count)."""
     url = settings.API_BASE_URL.rstrip("/") + path
     try:
         resp = httpx.request(method, url, timeout=60, **kwargs)
@@ -24,13 +32,19 @@ def _request(method: str, path: str, **kwargs):
         except Exception:
             detail = resp.text or resp.reason_phrase
         raise ApiError(resp.status_code, detail)
-    if resp.status_code == 204 or not resp.content:
-        return None
-    return resp.json()
+    return resp
 
 
 def get(path: str, params: dict | None = None):
     return _request("GET", path, params=params)
+
+
+def get_paginated(path: str, params: dict | None = None) -> tuple[list, int]:
+    """GET de lista paginada → (itens, total). `total` vem do header X-Total-Count (WORK-007)."""
+    resp = _raw_request("GET", path, params=params)
+    items = resp.json() if resp.content else []
+    total = int(resp.headers.get("X-Total-Count", len(items)))
+    return items, total
 
 
 def post(path: str, json: dict | None = None, data: dict | None = None, files=None):

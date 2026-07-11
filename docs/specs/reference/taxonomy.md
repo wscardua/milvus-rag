@@ -37,7 +37,21 @@ Eixo *tipo* do documento. Escolhido pelo usuário no upload (não sugerido pela 
 - Relatório
 - Outro
 
-## 3. Tipos de vínculo entre documentos (`link_type`)
+## 3. Fase de delivery (`delivery_phase`)
+
+Eixo *etapa do fluxo de entrega* a que o documento se refere (ADR-0014). **Ortogonal** a `delivery_process` (o processo/iniciativa dentro da squad), a `category`/`subcategory` (assunto) e a `doc_type` (natureza). Entrada do usuário (não sugerida pela IA), **opcional** e editável. Lista **fechada**:
+
+- Discovery
+- Refinamento Funcional
+- Refinamento Técnico
+- Desenvolvimento
+- Testes
+- Release
+- Deploy
+
+Filtro na listagem de documentos (`GET /documents?delivery_phase=`). Não entra no índice Milvus nem nos filtros de `/query` (ADR-0014).
+
+## 4. Tipos de vínculo entre documentos (`link_type`)
 
 Lista fixa dos vínculos direcionados (aresta fonte → alvo) entre documentos da **mesma squad** (ADR-0008). A coluna de expansão indica se o alvo entra no contexto do retrieval.
 
@@ -51,5 +65,5 @@ Lista fixa dos vínculos direcionados (aresta fonte → alvo) entre documentos d
 ## Regras
 
 - A classificação por IA é **restrita** a esta taxonomia — a IA não cria rótulos novos (mitiga prompt injection; ADR-0007).
-- Campos **sugeridos pela IA e editáveis** pelo usuário: `title`, `category`, `subcategory`, `summary`. `doc_type`, squad e processo são entrada do usuário. `title` é opcional no upload (se vazio, a IA sugere; fallback = nome do arquivo).
+- Campos **sugeridos pela IA e editáveis** pelo usuário: `title`, `category`, `subcategory`, `summary`. `doc_type`, squad, processo, `delivery_phase` e `valid_until` são entrada do usuário. `title` é opcional no upload (se vazio, a IA sugere; fallback = nome do arquivo). `delivery_phase` e `valid_until` são opcionais (ADR-0014).
 - Estas listas são **seed** — o CRUD de squads/processos (`organization-admin`) não gerencia a taxonomia na POC; alterá-la é mudança de referência (este arquivo).

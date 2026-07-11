@@ -1,7 +1,7 @@
 ---
 id: FEAT-INGEST-001
 title: Pipeline de Ingestão
-version: 0.10.0
+version: 0.11.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
@@ -23,7 +23,7 @@ Após o upload (FEAT-UPLOAD-001), o documento é só um arquivo. Para responder 
 ## 3. Escopo
 ### Incluído
 - **Worker daemon** que consome a fila `ingestion_job` no Postgres (ADR-0004).
-- Extração de texto por família de formato (ADR-0002): texto/MD direto; PDF/DOCX por parser; HTML sem marcação; XLS/XLSX por aba/linha; `.py` por blocos lógicos.
+- Extração de texto por família de formato (ADR-0002): texto/MD direto; PDF/DOCX por parser; HTML sem marcação; XLS/XLSX por aba/linha; `.py` por blocos lógicos; **PPT/PPTX** (texto por slide — título/corpo/notas — via `python-pptx`, imagens dos slides via vision best-effort); **`.ipynb`** (células markdown + código, na ordem do notebook; saídas textuais opcionais); **imagens** (`.png/.jpg/.jpeg/.gif/.bmp/.webp/.tiff`, descritas por vision; fallback = nome do arquivo). — ADR-0002 (rev. 2026-07-10).
 - **Chunking adaptativo por `doc_type` (ADR-0013, ADR-0006):** `size` e `overlap` configuráveis por variável de ambiente por tipo de documento; fallback para o default global (`chunk_size_words`/`chunk_overlap_words`) quando o `doc_type` não tem configuração específica (ex.: `Outro`) ou é `None`. Chunk < 2048 tokens do modelo.
 - **Log detalhado de ingestão (ADR-0011):** ao concluir, o worker registra o resumo do processamento no console e no evento `job_indexed` do `system_log` — no **`message`** (resumo legível, exibido na tela Logs & Saúde) e no **`context`** (mesmos campos estruturados, para consulta/tuning): `doc_type` + perfil aplicado (específico/fallback), tamanho do texto extraído, `chunk_size`/`overlap`, contagem de chunks e tokens por chunk (min/avg/max), nº de vetores, `vision_enabled` e `duration_ms`.
 - Geração de embeddings **em lote** com `embeddinggemma-300m` (768, COSINE) via LM Studio (`/v1/embeddings`).
@@ -106,6 +106,7 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-10 | 0.11.0 | - | Extração para novos formatos: PPT/PPTX (slides+notas, imagens via vision), `.ipynb` (markdown+código) e imagens (via vision) | WORK-007, ADR-0002 (rev.) |
 | 2026-07-10 | 0.10.0 | - | Chunking adaptativo por doc_type: perfis size/overlap por tipo, todos configuráveis via env (fallback global) | WORK-006, ADR-0013 |
 | 2026-07-10 | 0.9.0 | - | Descrição de imagens por LLM vision (best-effort) intercalada no texto antes do chunking, em PDF e DOCX; habilitável por `VISION_ENABLED`; PyMuPDF para extrair imagens do PDF | WORK-005, ADR-0012 |
 | 2026-07-09 | 0.8.0 | - | Exclusão de documento remove chunks + vetores (`delete_by_document`); worker emite eventos no `system_log` (start/heartbeat/indexed/retry/failed) | WORK-003, ADR-0010, ADR-0011 |

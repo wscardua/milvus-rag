@@ -8,11 +8,12 @@ Fila:         ingestion_job (estado + retry/visibility timeout — ADR-0009)
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -41,8 +42,18 @@ DOC_TYPES = (
     "Base de Conhecimento", "Apresentação", "Planilha", "Contrato / Documento legal",
     "Código-fonte", "Relatório", "Outro",
 )
-# Extensões aceitas no upload (ADR-0002)
-ALLOWED_EXTENSIONS = (".pdf", ".docx", ".txt", ".md", ".html", ".htm", ".py", ".xls", ".xlsx")
+# Fases do ciclo de entrega (lista fechada — ADR-0014; ver reference/taxonomy.md §3)
+DELIVERY_PHASES = (
+    "Discovery", "Refinamento Funcional", "Refinamento Técnico",
+    "Desenvolvimento", "Testes", "Release", "Deploy",
+)
+# Extensões de imagem tratadas como documento próprio (descritas por vision — ADR-0002 rev./ADR-0012)
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".tiff", ".tif")
+# Extensões aceitas no upload (ADR-0002; rev. 2026-07-10: +pptx/ppt, +ipynb, +imagens)
+ALLOWED_EXTENSIONS = (
+    ".pdf", ".docx", ".txt", ".md", ".html", ".htm", ".py", ".xls", ".xlsx",
+    ".ppt", ".pptx", ".ipynb", *IMAGE_EXTENSIONS,
+)
 
 
 def _uuid_pk() -> Mapped[uuid.UUID]:
@@ -118,6 +129,9 @@ class Document(TimestampMixin, Base):
     author: Mapped[str | None] = mapped_column(String(200))
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), server_default="{}", nullable=False)
     doc_type: Mapped[str | None] = mapped_column(String(120))
+    # Ciclo de entrega (ADR-0014): fase (lista fechada) e vigência (após a data → rebaixado no retrieval)
+    delivery_phase: Mapped[str | None] = mapped_column(String(60))
+    valid_until: Mapped[date | None] = mapped_column(Date)
 
     # Arquivo
     original_filename: Mapped[str | None] = mapped_column(String(500))

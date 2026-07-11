@@ -30,6 +30,8 @@ def to_document_out(session: Session, doc: Document) -> DocumentOut:
         author=doc.author,
         tags=list(doc.tags or []),
         doc_type=doc.doc_type,
+        delivery_phase=doc.delivery_phase,
+        valid_until=doc.valid_until,
         original_filename=doc.original_filename,
         mime_type=doc.mime_type,
         size_bytes=doc.size_bytes,

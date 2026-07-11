@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.base import get_session
 from app.db.models import (
+    DELIVERY_PHASES,
     DOC_TYPES,
     LINK_TYPES,
     Category,
@@ -165,6 +166,12 @@ def list_doc_types():
 @router.get("/link-types", response_model=list[str])
 def list_link_types():
     return list(LINK_TYPES)
+
+
+@router.get("/delivery-phases", response_model=list[str])
+def list_delivery_phases():
+    """Lista fechada de fases do ciclo de entrega (ADR-0014)."""
+    return list(DELIVERY_PHASES)
 
 
 @router.get("/categories", response_model=list[CategoryOut])

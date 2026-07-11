@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Retrieval
     retrieval_top_k: int = 5
     retrieval_min_score: float = 0.3  # abaixo disto: "sem contexto suficiente" (COSINE)
+    # Vigência (ADR-0014): hits de documentos vencidos (valid_until < hoje) têm o score
+    # multiplicado por este fator e são reordenados — rebaixados, não excluídos. 1.0 = desliga.
+    retrieval_expired_score_factor: float = 0.5
 
     # Chunking (ADR-0002: chunk < 2048 tokens do modelo)
     chunk_size_words: int = 350

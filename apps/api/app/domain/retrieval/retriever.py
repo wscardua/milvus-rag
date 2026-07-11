@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import time
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.models import Chunk, DocumentLink
+from app.db.models import Chunk, Document, DocumentLink
 from app.services import embeddings, llm, vectorstore
 
 # filtros da UI/contrato → campos do payload no Milvus
@@ -45,14 +46,46 @@ def _metrics(started: float, hits: list[dict]) -> dict:
     }
 
 
+def _demote_expired(session: Session, hits: list[dict]) -> list[dict]:
+    """Rebaixa hits de documentos vencidos e reordena pelo score ajustado (ADR-0014).
+
+    Vencido = `valid_until IS NOT NULL AND valid_until < hoje` (data, UTC). O score é
+    multiplicado por `retrieval_expired_score_factor` — rebaixado, não excluído. `factor==1.0`
+    (ou sem hits/documentos vencidos) é no-op, preservando a ordem original do Milvus.
+    """
+    factor = settings.retrieval_expired_score_factor
+    if factor == 1.0 or not hits:
+        return hits
+    doc_ids = {h["document_id"] for h in hits if h.get("document_id")}
+    if not doc_ids:
+        return hits
+    today = datetime.now(timezone.utc).date()
+    rows = session.execute(
+        select(Document.id, Document.valid_until).where(
+            Document.id.in_({uuid.UUID(d) for d in doc_ids})
+        )
+    ).all()
+    expired = {str(did) for did, valid_until in rows if valid_until is not None and valid_until < today}
+    if not expired:
+        return hits
+    adjusted = [
+        {**h, "score": h["score"] * factor} if h.get("document_id") in expired else h
+        for h in hits
+    ]
+    adjusted.sort(key=lambda h: h["score"], reverse=True)
+    return adjusted
+
+
 def _search(session: Session, question: str, filters: dict | None, top_k: int):
     """Embedding da pergunta + busca vetorial + carga dos chunks base.
 
     Base compartilhada por `answer_query` (com geração) e `retrieve_chunks` (sem geração).
+    Aplica o rebaixamento por vigência (ADR-0014) antes de carregar os chunks.
     Retorna (hits, chunks_por_milvus_id).
     """
     qvec = embeddings.embed_query(question)
     hits = vectorstore.search(qvec, top_k, _map_filters(filters))
+    hits = _demote_expired(session, hits)
     hit_ids = [h["chunk_id"] for h in hits]
     chunks = {
         c.milvus_vector_id: c

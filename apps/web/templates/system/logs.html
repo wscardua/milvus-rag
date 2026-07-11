@@ -64,5 +64,13 @@
       {% endfor %}
     </tbody>
   </table>
+
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    {% if has_prev %}<a class="btn btn--ghost btn--sm" href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ page|add:'-1' }}">← Anterior</a>{% else %}<span class="btn btn--ghost btn--sm" disabled>← Anterior</span>{% endif %}
+    <span class="sub">Página {{ page }} de {{ total_pages }} · {{ total }} evento{{ total|pluralize }}</span>
+    {% if has_next %}<a class="btn btn--ghost btn--sm" href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ page|add:'1' }}">Próxima →</a>{% else %}<span class="btn btn--ghost btn--sm" disabled>Próxima →</span>{% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
