@@ -1,15 +1,15 @@
 ---
 id: FEAT-QUERY-001
 title: Consulta e Resposta com Citações
-version: 0.8.0
+version: 0.9.1
 status_spec: aprovada
-status_impl: implementada
+status_impl: em_andamento
 owner: -
 created: 2026-07-09
 updated: 2026-07-11
-contracts: [query-and-citations]
+contracts: [query-and-citations, conversations]
 depends_on: [FEAT-INGEST-001]
-adrs: [ADR-0001, ADR-0002, ADR-0005, ADR-0007, ADR-0008, ADR-0011, ADR-0014, ADR-0015]
+adrs: [ADR-0001, ADR-0002, ADR-0005, ADR-0007, ADR-0008, ADR-0011, ADR-0014, ADR-0015, ADR-0016, ADR-0017]
 ---
 
 # Feature — Consulta e Resposta com Citações
@@ -31,29 +31,36 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - **Auditoria da consulta (ADR-0011):** toda `/query` é gravada no `query_log` com métricas (scores, modelos, params de chunking, latência); a resposta traz `query_id`.
 - **Feedback 👍/👎** da resposta (`POST /query/{query_id}/feedback`) para avaliar qualidade e azeitar modelo/chunk.
 - **Retrieval puro (`POST /retrieve`, ADR-0005):** endpoint dedicado que devolve só os trechos relevantes + score, **sem geração**, sem expansão por vínculos e sem gravar `query_log`. Reusa o mesmo retrieval de `/query`; consumido pela tool `retrieve_chunks` do MCP (FEAT-MCP-001).
+- **Conversa multi-turno (ADR-0016/ADR-0017, WORK-012):** `POST /query` aceita `conversation_id` opcional para agrupar perguntas de acompanhamento numa mesma conversa persistida; perguntas de acompanhamento passam por **query condensation** (reescrita autônoma via LLM, usando as últimas 2-4 perguntas anteriores da conversa) antes do retrieval. Cada turno é recuperado e citado de forma independente — grounding por turno, nunca herdado do turno anterior. Novos endpoints `POST /conversations`, `GET /conversations` (lista) e `GET /conversations/{id}` (histórico). Uso stateless (sem `conversation_id`) continua 100% retrocompatível.
 ### Fora de escopo
-- Conversa multi-turno com memória (fora da POC).
 - Expansão multi-salto (transitiva) de vínculos — só 1 salto na POC (ADR-0008).
 - Reranking avançado (pode virar melhoria posterior via ADR).
 - Filtro de `tags` com semântica **AND** (documento precisa ter todas as tags pedidas) — só **OR** na POC (ADR-0015).
+- **Exclusão de conversa** (`DELETE /conversations/{id}`) — fora de escopo desta iteração (ADR-0016); revisitar se surgir demanda.
+- **Autenticação/isolamento de conversas por usuário** — não existe modelo de usuário no sistema hoje; `conversation` não tem dono. Tratado por ADR futuro se autenticação for introduzida (ADR-0016).
+- **Edição/regeneração de um turno já respondido** — cada turno é append-only; não há como corrigir ou refazer uma resposta anterior nesta iteração.
 
 ## 4. Atores e pré-condições
 - **Ator:** usuário da UI Django.
 - **Pré-condições:** ao menos um documento em estado `indexed`; contrato do índice ativo.
+- Sem `conversation_id`, a consulta é stateless (comportamento atual, inalterado). Com `conversation_id`, a conversa referenciada deve existir (`404` se não existir).
 
 ## 5. Comportamento e fluxos
 ### Fluxo principal
-1. (Django) Usuário envia uma pergunta (com filtros opcionais).
-2. (FastAPI → LM Studio) Gera embedding da pergunta com `embeddinggemma-300m` (mesmo modelo do índice).
-3. (FastAPI → Milvus) Busca top-k (default 5) por similaridade COSINE, aplicando filtros por metadado — igualdade simples para `squad`/`delivery_process`/`category`/`doc_type`/`delivery_phase`; expressão `OR` de substring para `tags` (ADR-0015).
-4. (FastAPI → Postgres) Recupera os chunks correspondentes; **rebaixa hits de documentos vencidos** (`valid_until < hoje` → score × `retrieval_expired_score_factor`) e reordena pelo score ajustado (ADR-0014); **expande 1 salto** pelos `document_link` dos documentos recuperados (inclui `esclarece`/`complementa`/`precede`; exclui `substitui`) e monta o contexto (deduplicando, respeitando limite).
-5. (FastAPI → LM Studio) Gera a resposta (API OpenAI-compatível) e anexa `citations[]` (documento, chunk, trecho, score) e `linked_flow[]` (vínculos considerados/excluídos).
-6. (Django) Exibe resposta, citações e o fluxo de documentos relacionados.
+1. (Django) Usuário envia uma pergunta (com filtros opcionais e, se em modo chat, `conversation_id`).
+2. **(FastAPI, se `conversation_id` presente e não é o primeiro turno) Query condensation (ADR-0017):** chamada LLM (`condensation_model`) reescreve a pergunta como autônoma usando as últimas 2-4 perguntas anteriores da mesma conversa. Falha degrada para a pergunta crua (best-effort).
+3. (FastAPI → LM Studio) Gera embedding da pergunta (condensada ou original) com `embeddinggemma-300m` (mesmo modelo do índice).
+4. (FastAPI → Milvus) Busca top-k (default 5) por similaridade COSINE, aplicando filtros por metadado — igualdade simples para `squad`/`delivery_process`/`category`/`doc_type`/`delivery_phase`; expressão `OR` de substring para `tags` (ADR-0015).
+5. (FastAPI → Postgres) Recupera os chunks correspondentes; **rebaixa hits de documentos vencidos** (`valid_until < hoje` → score × `retrieval_expired_score_factor`) e reordena pelo score ajustado (ADR-0014); **expande 1 salto** pelos `document_link` dos documentos recuperados (inclui `esclarece`/`complementa`/`precede`; exclui `substitui`) e monta o contexto por orçamento de palavras (histórico condensado + chunks, ADR-0017), deduplicando.
+6. (FastAPI → LM Studio) Gera a resposta em 3 blocos de prompt — sistema (grounding/abstenção), histórico condensado (tom, não citável), chunks (fonte de verdade) — e anexa `citations[]` (documento, chunk, trecho, score) e `linked_flow[]` (vínculos considerados/excluídos). Se `conversation_id` presente, grava o turno em `query_log` com `conversation_id`/`turn_index` (calculado pelo servidor) e toca `conversation.updated_at`.
+7. (Django) Exibe resposta, citações e o fluxo de documentos relacionados; em modo chat, anexa à thread da conversa.
 ### Fluxos alternativos e de erro
 - Nenhum chunk relevante / abaixo de limiar → resposta indica ausência de contexto (não alucina).
 - Filtro sem resultados → sinaliza que não há documentos no recorte.
 - Documento recuperado com alvo `substitui` → alvo obsoleto excluído do contexto e sinalizado no `linked_flow[]`.
 - Falha do modelo/índice → erro claro, sem resposta fabricada.
+- Falha na query condensation (ADR-0017) → degrada para a pergunta crua, registra `system_log` (`llm_condensation_failed`), não bloqueia a resposta.
+- `conversation_id` inexistente → `404`.
 
 ## 6. Regras de domínio
 - Toda resposta cita chunks reais recuperados (grounding obrigatório).
@@ -63,19 +70,23 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - Filtros por metadado (ADR-0015): `delivery_phase` filtra por igualdade (lista fechada); `tags` filtra por **OR** — hit incluído se tiver qualquer uma das tags pedidas (payload Milvus guarda `delivery_phase`/`tags` como campo dinâmico — sem drop/recriação da coleção; tags como string delimitada por vírgula, filtro via `LIKE` por tag). Documentos ingeridos antes do WORK-010 não têm esses 2 campos populados no payload até serem reprocessados — reenfileirar o acervo é **recomendado, não bloqueante**: a busca já funciona para documentos novos/reprocessados assim que a mudança é liberada.
 - Vigência (ADR-0014): documento é **vencido** quando `valid_until IS NOT NULL AND valid_until < hoje` (data, UTC). Vencidos são **rebaixados** (score ajustado), não excluídos — preserva grounding quando só há material vencido. O `query_log.scores` grava o score ajustado (o efetivamente usado). Sem mudança no índice Milvus.
 - Conteúdo dos chunks (inclusive dos documentos expandidos) é entrada não confiável ao montar o prompt (mitigar prompt injection).
+- **Conversa multi-turno (ADR-0016/ADR-0017):** `turn_index` é sempre calculado pelo servidor (nunca aceito do cliente), sob lock de linha da `conversation` — evita gaps/duplicatas em turnos concorrentes na mesma conversa. Cada turno é recuperado e citado de forma independente: chunks do turno anterior nunca entram diretamente no prompt do turno seguinte. O bloco de sistema (grounding/abstenção) é reafirmado a cada chamada — nenhuma sessão persistida no LM Studio entre turnos.
 
 ## 7. Contratos e integrações
-- Contrato: `query-and-citations` (`POST /query` → resposta com `query_id`, `citations[]`, `linked_flow[]`; `POST /query/{query_id}/feedback`).
-- Integrações: Milvus (busca vetorial) e Postgres (chunks/metadados, grafo `document_link`, `query_log`).
+- Contrato: `query-and-citations` (`POST /query` → resposta com `query_id`, `citations[]`, `linked_flow[]`, e `conversation_id`/`turn_index` quando aplicável; `POST /query/{query_id}/feedback`).
+- Contrato: `conversations` (ADR-0016) — `POST /conversations`, `GET /conversations` (lista paginada), `GET /conversations/{id}` (histórico de turnos).
+- Integrações: Milvus (busca vetorial) e Postgres (chunks/metadados, grafo `document_link`, `query_log`, `conversation`).
 
 ## 8. Dados e persistência
 - Leitura de `chunk`, metadados e `document_link` (expansão de contexto).
-- `query_log` (ADR-0011): **toda** consulta gravada — pergunta, filtros, `top_k`, resposta, citações, `linked_flow`, `scores[]`, ids recuperados, `embedding_model`/`chat_model`, params de chunking, `retrieval_min_score`, `latency_ms`, e `rating`/`rating_at` (feedback). Sem FK para `document`/`chunk` (snapshot — sobrevive à exclusão).
+- `query_log` (ADR-0011): **toda** consulta gravada — pergunta, filtros, `top_k`, resposta, citações, `linked_flow`, `scores[]`, ids recuperados, `embedding_model`/`chat_model`, params de chunking, `retrieval_min_score`, `latency_ms`, e `rating`/`rating_at` (feedback). Sem FK para `document`/`chunk` (snapshot — sobrevive à exclusão). **A partir do ADR-0016**, ganha `conversation_id` (nullable, FK → `conversation`) e `turn_index` (nullable, calculado pelo servidor) — nulos preservam o uso stateless.
+- `conversation` (ADR-0016, nova): `id`, `title` (nullable, auto-gerado), `squad_id` (nullable, conveniência de UI — não é filtro imposto), `created_at`, `updated_at` (tocado a cada turno).
 
 ## 9. Segurança, privacidade e riscos
 - Prompt injection via conteúdo dos documentos → isolar/sanitizar contexto.
 - Vazamento de PII em respostas → citações permitem rastrear e auditar a origem.
 - Risco de alucinação → mitigado por grounding e limiar de similaridade.
+- **Prompt injection via histórico de conversa (ADR-0017):** a chamada de query condensation usa só as perguntas anteriores do usuário, nunca as respostas geradas (que podem conter trechos citados de documentos, entrada não confiável) — reduz a superfície de injeção via histórico. O bloco de histórico condensado no prompt final nunca é tratado como fonte de verdade/citável.
 
 ## 10. Critérios de aceite
 - [x] Resposta cita chunks reais recuperados (grounding).
@@ -85,6 +96,13 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - [x] Feedback 👍/👎 grava `rating`/`rating_at`; `query_id` inexistente → `404`; rating inválido → `422`.
 - [x] UI de Consulta filtra por `delivery_process` (WORK-010, Fase 1) — `<select>` no form; validado por smoke test manual (sem suíte automatizada de UI nesta POC).
 - [x] `/query`/`/retrieve` filtram por `delivery_phase` (igualdade) e `tags` (OR) (WORK-010, Fase 2, ADR-0015) — validado por `test_vectorstore_dynamic_fields.py` (Milvus real) + `test_retrieval_filters.py` (`_map_filters`↔`_build_filter_expr`). Só alcança documentos já reprocessados — reindexação do acervo é manual/recomendada (ver Lacunas conhecidas em `status.md`), não coberta por teste automatizado end-to-end (depende de LM Studio + worker).
+- [x] `POST /query` sem `conversation_id` continua 100% retrocompatível (uso stateless via MCP/API direta inalterado) — `test_query_without_conversation_id_stays_stateless`.
+- [x] `POST /conversations`, `GET /conversations` e `GET /conversations/{id}` implementados conforme o contrato `conversations` (ADR-0016) — `test_create_and_get_conversation`, `test_list_conversations_has_total_count_header`, `test_get_conversation_unknown_404`.
+- [x] Perguntas de acompanhamento (`turn_index > 0`) passam por query condensation antes do retrieval; primeiro turno (`turn_index == 0`) nunca condensa (ADR-0017) — `test_second_turn_condenses_and_increments_turn_index` (ponta a ponta, 2 turnos reais contra LM Studio) + `test_condense_question_uses_only_previous_questions_not_answers` (unitário).
+- [x] Falha na condensação degrada para a pergunta crua e registra `system_log` (`llm_condensation_failed`) sem bloquear a resposta — `test_condense_question_failure_degrades_to_raw_question`.
+- [x] `turn_index` é calculado pelo servidor e não apresenta gaps/duplicatas sob turnos sequenciais na mesma conversa (lock de linha, ADR-0016) — `test_second_turn_condenses_and_increments_turn_index`. Concorrência simultânea real (2 requisições paralelas) não testada com carga — mitigação é o lock de linha (`SELECT ... FOR UPDATE`), não coberta por teste de race condition explícito nesta iteração.
+- [x] Cada turno é recuperado e citado de forma independente — grounding preservado por turno (retrieval roda do zero a cada `answer_query`, chunks do turno anterior nunca reaproveitados).
+- [x] `condensation_model` é configurável via env, com default = `chat_model` (ADR-0017/ADR-0006) — `test_condense_question_uses_only_previous_questions_not_answers` confirma o uso de `settings.condensation_model`.
 
 ## 11. Testes esperados
 - **Unitário:** montagem de contexto/prompt; deduplicação; limiar; `_map_filters`/`_FILTER_MAP` (ADR-0015) — `delivery_phase` vira `k: v` direto, `tags` (lista) vira expressão `OR` de `LIKE`; escaping de `"`/`\`/`,`/`%` no valor da tag antes de montar a expressão.
@@ -94,6 +112,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - **Regressão:** contrato `query-and-citations`; consistência com o modelo de embeddings; expansão por vínculos (1 salto; `substitui` sempre excluído do contexto); filtros pré-existentes (`squad`/`category`/`doc_type`) continuam funcionando isolados e combinados com os novos; rebaixamento por vigência (ADR-0014) continua aplicando mesmo com filtro de `tags`/`delivery_phase` ativo.
 - **Spike técnico (ADR-0015, pré-requisito da Fase 2):** `upsert` de um chunk de teste com `delivery_phase`/`tags` como campo dinâmico + `search` com `filter` de igualdade e de `LIKE` sobre esses campos, confirmando que o Milvus 2.5.4/pymilvus 2.5.4 filtra corretamente. Só depois disso generalizar `vectorstore.py`/`retriever.py`. Se falhar: plano B do ADR (schema declarado + drop/recriação) — reabre este bloco de testes com o novo mecanismo.
 - **Cenário de payload parcial (WORK-010):** documento indexado **antes** da mudança (sem `delivery_phase`/`tags` no payload) não aparece em busca filtrada por esses campos, mas continua aparecendo em busca sem filtro ou filtrada só por `squad`/`category`/`doc_type` — a ausência do campo dinâmico não pode quebrar a busca geral.
+- **Multi-turno (ADR-0016/ADR-0017, WORK-012):** unitário — cálculo de `turn_index` (sem gaps, sem duplicata sob concorrência simulada); seleção das últimas 2-4 perguntas anteriores para condensação; condensação usa só perguntas, nunca respostas; falha da condensação degrada para pergunta crua + evento `system_log`. Integração — `POST /query` com `conversation_id` grava `query_log` corretamente encadeado; `GET /conversations/{id}` retorna os turnos na ordem certa; `conversation_id` inexistente → `404`. Fluxo — sequência de 2-3 perguntas de acompanhamento na UI produz respostas coerentes, cada uma com citações próprias (não herdadas do turno anterior). Regressão — `POST /query` sem `conversation_id` continua idêntico ao comportamento anterior (mesma resposta, mesmo formato, sem regressão de latência perceptível pela ausência de condensação).
 
 ## 12. Dependências
 - FEAT-INGEST-001 (documentos indexados).
@@ -101,17 +120,20 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - LM Studio ativo (API OpenAI-compatível) para embedding da pergunta e geração — modelos de embedding e chat carregados.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack. ADR-0002 — embeddings locais e LLM via LM Studio. ADR-0007 — filtros por squad/processo. ADR-0008 — expansão de retrieval por vínculos + `linked_flow[]`. ADR-0011 — `query_log` (auditoria + métricas) e feedback 👍/👎. ADR-0014 — rebaixamento de documentos vencidos (`valid_until`) no retrieval. ADR-0015 — filtros por `delivery_phase`/`tags` no Milvus via campo dinâmico, sem drop/recriação (revisa parcialmente o ADR-0014 quanto a `delivery_phase`).
+- ADR-0001 — stack. ADR-0002 — embeddings locais e LLM via LM Studio. ADR-0007 — filtros por squad/processo. ADR-0008 — expansão de retrieval por vínculos + `linked_flow[]`. ADR-0011 — `query_log` (auditoria + métricas) e feedback 👍/👎. ADR-0014 — rebaixamento de documentos vencidos (`valid_until`) no retrieval. ADR-0015 — filtros por `delivery_phase`/`tags` no Milvus via campo dinâmico, sem drop/recriação (revisa parcialmente o ADR-0014 quanto a `delivery_phase`). ADR-0016 — schema de conversação (`conversation` + `query_log.conversation_id`/`turn_index`). ADR-0017 — query condensation para retrieval multi-turno.
 
 ## 14. Pendências e questões em aberto
 - Calibrar limiar de similaridade COSINE para "sem contexto suficiente" (`top_k` default 5 já fixado). O `query_log` (scores/rating/latency) agora fornece dados para essa calibração.
 - ~~Definir se `query_log` entra na POC~~ → **resolvido (ADR-0011): entra, gravando toda consulta.**
 - ~~ADR-0015 em `proposta`~~ → **resolvido: `aceita`** — `software-architect`/`architecture-guard` validaram a fronteira e revisaram o mecanismo (campo dinâmico em vez de drop/recriação). Falta só um spike técnico de implementação (não bloqueia a decisão) confirmando `LIKE` sobre campo dinâmico nesta versão do Milvus (2.5.4) — plano B documentado no ADR se o spike falhar.
 - Semântica **AND** para `tags` (documento com todas as tags pedidas) fica fora de escopo do WORK-010 — avaliar demanda antes de implementar (ADR-0015).
+- **Multi-turno (WORK-012):** implementação ainda não iniciada — spec e ADRs (0016/0017) aprovados, aguardando as skills técnicas (`fastapi-domain`, `postgres-modeling`, `django-web`, `embeddings-retrieval`). Calibrar, na implementação, o teto de palavras do histórico condensado (`history_budget_words`) e o número exato de turnos anteriores usados na condensação (2-4, a fixar por teste empírico).
 
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-11 | 0.9.1 | - | Backend do chat multi-turno **implementado**: migration `6cf5cfaf87e7`, `retriever.py` (condensação + orçamento por palavras), endpoints `/conversations` + `/query` com `conversation_id`. Os 7 critérios de aceite do backend viraram `[x]`. pytest 100 verde (85 + 15, incl. ponta a ponta de 2 turnos reais). UI Django ainda pendente | WORK-012, ADR-0016, ADR-0017 |
+| 2026-07-11 | 0.9.0 | - | Chat multi-turno trazido para dentro do escopo (saiu de "fora de escopo"): `conversation_id` opcional em `POST /query`, novos endpoints `POST /conversations`/`GET /conversations`/`GET /conversations/{id}`, query condensation por turno (ADR-0017), nova tabela `conversation` + `query_log.conversation_id`/`turn_index` (ADR-0016), orçamento de contexto por palavras (substitui truncamento de 8000 caracteres). Ainda não implementado — spec/ADRs preparados antes do código (docs-first) | WORK-012, ADR-0016, ADR-0017 |
 | 2026-07-11 | 0.8.0 | - | Filtros de retrieval por `delivery_process` (fecha lacuna: UI ganha o `<select>`, backend já suportava) e, via ADR-0015, `delivery_phase`/`tags` no Milvus (campo dinâmico, sem drop/recriação da coleção; reindexação do acervo é recomendada, não bloqueante). Implementado e testado: pytest 68 (apps/api) | WORK-010, ADR-0015 |
 | 2026-07-10 | 0.7.0 | - | Rebaixamento de documentos vencidos (`valid_until`) no retrieval — score × `retrieval_expired_score_factor`, reordenação; vale p/ `/query` e `/retrieve` | WORK-007, ADR-0014 |
 | 2026-07-09 | 0.6.0 | - | Endpoint `POST /retrieve` (retrieval puro, sem geração) para o MCP; reusa o retrieval de `/query` sem gravar `query_log` | WORK-004, ADR-0005 |

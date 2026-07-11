@@ -1,15 +1,15 @@
 ---
 id: FEAT-WEB-001
 title: Layout do Frontend (UI Django)
-version: 0.6.0
+version: 0.7.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
 updated: 2026-07-11
-contracts: [upload-and-metadata, query-and-citations, organization-admin, document-links, logs-and-health]
+contracts: [upload-and-metadata, query-and-citations, organization-admin, document-links, logs-and-health, conversations]
 depends_on: [FEAT-UPLOAD-001, FEAT-INGEST-001, FEAT-QUERY-001]
-adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008, ADR-0010, ADR-0011, ADR-0014]
+adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008, ADR-0010, ADR-0011, ADR-0014, ADR-0016, ADR-0017]
 ---
 
 # Feature — Layout do Frontend (UI Django)
@@ -17,7 +17,7 @@ adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008, ADR-0010, ADR-0011, ADR
 > **Referência visual:** mock estático em [mocks/frontend-layout.html](../../../mocks/frontend-layout.html) (IBM Carbon Design System).
 
 ## 1. Visão geral
-Define o layout e as telas da UI Django (cliente da API FastAPI): shell de navegação e sete telas — Documentos, Upload, Detalhe, Consulta, administração de Squads e Processos de Delivery, e **Logs & Saúde**. Entrega a jornada completa da POC como experiência coesa, no design system da IBM Cloud (Carbon), sem mover regra crítica para a UI.
+Define o layout e as telas da UI Django (cliente da API FastAPI): shell de navegação e oito telas — Documentos, Upload, Detalhe, Consulta, **Chat (multi-turno, WORK-012)**, administração de Squads e Processos de Delivery, e **Logs & Saúde**. Entrega a jornada completa da POC como experiência coesa, no design system da IBM Cloud (Carbon), sem mover regra crítica para a UI.
 
 ## 2. Contexto e problema
 As specs de domínio (upload, ingestão, consulta) existem, mas não há camada de apresentação. Além disso, o negócio introduziu uma organização por **Squad → Processo de Delivery → Documento** e metadados classificatórios sugeridos por IA (categoria/subcategoria/resumo) que o usuário pode revisar. Esta feature materializa essas telas e serve de referência visual e de fluxo para a implementação.
@@ -28,7 +28,8 @@ As specs de domínio (upload, ingestão, consulta) existem, mas não há camada 
 - **Tela Documentos (listagem):** tabela com título, squad/processo, categoria (sugerida por IA), `status` (badge), **vínculos** (badge "🔗 N" a partir de `links_summary` — WORK-011, ADR-0008; clicável, leva à seção "Fluxo de documentos vinculados" do Detalhe; destacado quando há vínculo do tipo `substitui`, sinalizando possível conteúdo obsoleto já na listagem), data de ingestão, **fase de delivery** e **vigência (`valid_until`)**; filtros por squad, **processo (ADR-0007)**, **fase de delivery (ADR-0014)**, categoria, `doc_type`, `status`; **paginação funcional** (limit/offset + total via cabeçalho `X-Total-Count`; controles anterior/próxima). Atualização de `status` por **polling** de `GET /documents`.
 - **Tela Upload:** seleção obrigatória de **Squad** e **Processo de Delivery** (selects dependentes); arquivo; `title` **opcional** (IA sugere); `author`, `doc_type`, `tags`; **`delivery_phase`** (select da lista fechada, opcional) e **`valid_until`** (data, opcional) — ADR-0014; **vínculos iniciais opcionais** a documentos da mesma squad (tipo + alvo).
 - **Tela Detalhe:** vínculo (squad/processo) + metadados do usuário; bloco **Título, classificação & resumo** com `title`, `category`/`subcategory` (selects de enum dependentes) e `summary` — **pré-preenchidos com a sugestão da IA e editáveis** (salvar overrides); **`delivery_phase`** e **`valid_until`** editáveis (ADR-0014); **seção "Fluxo de documentos vinculados"** (adicionar/remover vínculos tipados da mesma squad; `substitui` marcado como excluído da busca); exibição de `error` quando `failed`. **Ações do documento (ADR-0010):** **Visualizar** (modal com `<iframe>` para PDF/TXT/MD/HTML), **Baixar** (arquivo original) e **Excluir** (com confirmação — remove chunks/vetores/arquivo).
-- **Tela Consulta:** pergunta, filtros **opcionais** por squad/processo/categoria/`doc_type`, `top_k` (avançado, default 5); exibição da resposta com **citações** (snippet, documento, score), o **fluxo de documentos relacionados** (`linked_flow[]`) e o estado "sem contexto suficiente". **Feedback 👍/👎 (ADR-0011)** da resposta (via fetch; opcional).
+- **Tela Consulta:** pergunta, filtros **opcionais** por squad/processo/categoria/`doc_type`, `top_k` (avançado, default 5); exibição da resposta com **citações** (snippet, documento, score), o **fluxo de documentos relacionados** (`linked_flow[]`) e o estado "sem contexto suficiente". **Feedback 👍/👎 (ADR-0011)** da resposta (via fetch; opcional). Permanece **stateless** (sem `conversation_id`) — tela separada do Chat.
+- **Tela Chat (WORK-012, ADR-0016/0017):** sidebar de conversas (`GET /conversations`, ordenada por atividade recente) + thread de mensagens (pergunta + resposta com citações como chips, a partir de `GET /conversations/{id}`) + composer fixo (`POST /query` com `conversation_id`). Nova conversa é criada implicitamente ao enviar a primeira pergunta (`POST /conversations` + `POST /query`); título auto-gerado pela API a partir da 1ª pergunta. Perguntas de acompanhamento passam por query condensation na API (transparente para a UI). Sem lógica de retrieval/prompt no Django — cliente HTTP puro, mesmo padrão das demais telas.
 - **Admin Squads:** CRUD de squads (nome, descrição).
 - **Admin Processos de Delivery:** CRUD de processos vinculados a uma squad.
 - **Tela Logs & Saúde (ADR-0011):** painel de saúde por serviço (Postgres/Milvus/LM Studio/worker) + fila de ingestão por estado; tabela de eventos do `system_log` com filtros por nível/componente e **paginação funcional** (limit/offset + `X-Total-Count`). Consome `GET /health` e `GET /logs` (contrato `logs-and-health`).
@@ -108,7 +109,7 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 - UI não expõe endpoints internos nem acessa Milvus/Postgres direto.
 
 ## 10. Critérios de aceite
-- [x] Layout base (Carbon) e navegação entre as 7 telas funcionam.
+- [x] Layout base (Carbon) e navegação entre as 8 telas funcionam.
 - [x] Upload exige squad + processo (dependentes) e valida tipo/tamanho antes de enviar.
 - [x] Listagem mostra squad/processo, categoria (marcada como sugerida por IA) e `status` atualizando por polling.
 - [x] Detalhe permite editar `title`/`category`/`subcategory`/`summary` pré-preenchidos pela IA e salvar overrides.
@@ -118,6 +119,7 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 - [x] Detalhe permite **Visualizar** (modal, tipos previewáveis), **Baixar** e **Excluir** o documento (ADR-0010).
 - [x] Consulta permite dar **👍/👎** na resposta, registrado via API (ADR-0011).
 - [x] Tela **Logs & Saúde** mostra o estado dos serviços e os eventos do `system_log` com filtros (ADR-0011).
+- [x] Tela **Chat** (WORK-012): sidebar lista conversas por atividade recente; enviar pergunta cria conversa implicitamente (título auto-gerado); thread mostra histórico completo com citações; pergunta de acompanhamento é respondida coerentemente (validado manualmente contra LM Studio real — condensação resolve elipse do turno anterior); tela de Consulta stateless permanece intacta e separada.
 
 ## 11. Testes esperados
 - **Unitário:** validação de formulários (obrigatoriedade de squad/processo, tipo/arquivo); dependência dos selects (squad→processo, categoria→subcategoria).
@@ -151,6 +153,7 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-11 | 0.7.0 | - | 8ª tela: **Chat** multi-turno (`apps/web/chat/`) — sidebar de conversas + thread + composer, cliente HTTP puro de `/conversations` e `/query` (`conversation_id`); tela de Consulta stateless preservada, sem mudanças. Validado manualmente (2 turnos reais, condensação confirmada) | WORK-012, ADR-0016, ADR-0017 |
 | 2026-07-11 | 0.6.0 | - | Badge de vínculos (`links_summary`, "🔗 N") na listagem de Documentos, com destaque para vínculo `substitui`; leva à seção de vínculos do Detalhe | WORK-011, ADR-0008 |
 | 2026-07-10 | 0.5.0 | - | Paginação funcional (Documentos+Logs); filtro por processo e por fase de delivery na listagem; `delivery_phase`/`valid_until` no Upload/Detalhe; novos formatos no Upload | WORK-007, ADR-0014, ADR-0002 (rev.) |
 | 2026-07-09 | 0.4.0 | - | 7ª tela (Logs & Saúde); Detalhe ganha Visualizar/Baixar/Excluir; feedback 👍/👎 na Consulta; contrato `logs-and-health`. Spec aprovada | WORK-003, ADR-0010, ADR-0011 |

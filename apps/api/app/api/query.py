@@ -29,12 +29,18 @@ def query(payload: QueryRequest, session: Session = Depends(get_session)):
         raise HTTPException(422, "Pergunta vazia.")
     top_k = payload.top_k or settings.retrieval_top_k
     try:
-        result = retriever.answer_query(session, payload.question, payload.filters, top_k)
+        result = retriever.answer_query(
+            session, payload.question, payload.filters, top_k, payload.conversation_id
+        )
+    except retriever.ConversationNotFoundError:
+        raise HTTPException(404, "Conversa não encontrada.")
     except Exception as exc:  # noqa: BLE001 — falha de índice/modelo → erro claro, sem resposta fabricada
         eventlog.log_event("ERROR", "retrieval", "query_failed", str(exc))
         raise HTTPException(502, f"Falha no retrieval/geração: {exc}")
 
     metrics = result.pop("metrics", {})
+    conversation_id = result.pop("conversation_id", None)  # ADR-0016
+    turn_index = result.pop("turn_index", None)
     log = QueryLog(
         question=payload.question,
         filters=payload.filters,
@@ -43,13 +49,20 @@ def query(payload: QueryRequest, session: Session = Depends(get_session)):
         answer=result["answer"],
         citations=result["citations"],
         linked_flow=result["linked_flow"],
+        conversation_id=conversation_id,
+        turn_index=turn_index,
         **metrics,
     )
     session.add(log)
     session.commit()
     session.refresh(log)
 
-    return {"query_id": str(log.id), **result}
+    return {
+        "query_id": str(log.id),
+        "conversation_id": str(conversation_id) if conversation_id else None,
+        "turn_index": turn_index,
+        **result,
+    }
 
 
 @router.post("/retrieve", response_model=RetrieveResponse)

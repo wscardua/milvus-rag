@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     embedding_model: str = "embeddinggemma-300m"
     embedding_dim: int = 768
     chat_model: str = "local-chat-model"
+    # Modelo de condensação de pergunta em conversas multi-turno (ADR-0017): mesmo servidor
+    # LM Studio (lm_studio_base_url). Default = mesmo modelo de chat; trocar por um modelo
+    # mais barato/rápido é só setar CONDENSATION_MODEL no .env — zero mudança de código.
+    condensation_model: str = "local-chat-model"
 
     # Upload
     upload_dir: str = "../../data/uploads"
@@ -45,6 +49,14 @@ class Settings(BaseSettings):
     # Vigência (ADR-0014): hits de documentos vencidos (valid_until < hoje) têm o score
     # multiplicado por este fator e são reordenados — rebaixados, não excluídos. 1.0 = desliga.
     retrieval_expired_score_factor: float = 0.5
+
+    # Orçamento de contexto do prompt de geração (ADR-0017), em contagem de palavras —
+    # mesma aproximação de "tokens" já usada no chunking (não introduz tokenizer real).
+    # Substitui o truncamento bruto de 8000 caracteres usado antes do chat multi-turno.
+    context_budget_words: int = 1200
+    history_budget_words: int = 200
+    # Nº de perguntas anteriores da mesma conversa usadas na condensação (ADR-0017)
+    condensation_history_turns: int = 4
 
     # Chunking (ADR-0002: chunk < 2048 tokens do modelo)
     chunk_size_words: int = 350

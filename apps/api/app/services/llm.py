@@ -5,9 +5,15 @@ from app.config import settings
 from app.services.lmstudio import client
 
 
-def chat(messages: list[dict], max_tokens: int = 512, temperature: float = 0.2) -> str:
+def chat(
+    messages: list[dict],
+    max_tokens: int = 512,
+    temperature: float = 0.2,
+    model: str | None = None,
+) -> str:
+    """`model` permite override (ex.: `condensation_model`, ADR-0017); default = `chat_model`."""
     resp = client.chat.completions.create(
-        model=settings.chat_model,
+        model=model or settings.chat_model,
         messages=messages,
         max_tokens=max_tokens,
         temperature=temperature,
