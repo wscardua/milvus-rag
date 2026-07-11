@@ -8,12 +8,15 @@ A POC precisa fixar o contrato do índice (modelo/dimensão/métrica de embeddin
 
 - **Embeddings — via LM Studio.** Modelo `embeddinggemma-300m` (Google, base Gemma 3), servido pelo LM Studio no endpoint **OpenAI-compatível** `/v1/embeddings`. Multilíngue (PT-BR incluído), **dimensão 768** (MRL disponível para 512/256/128; a POC usa 768 cheio), métrica `COSINE`, contexto 2048 tokens. O backend consome como cliente HTTP — sem `sentence-transformers` no processo.
 - **Geração (LLM) — via LM Studio.** Mesmo servidor local, endpoint `/v1/chat/completions`. `base_url`, modelo e chave configuráveis por ambiente (ex.: `http://localhost:1234/v1`). O modelo de chat concreto é o carregado no LM Studio (não fixado aqui). Embeddings e chat ficam carregados simultaneamente no LM Studio.
-- **Formatos aceitos no upload.** PDF, DOCX, TXT/Markdown, HTML, `.py` (código), XLS/XLSX (planilha). Extração e chunking por família:
+- **Formatos aceitos no upload.** PDF, DOCX, TXT/Markdown, HTML, `.py` (código), XLS/XLSX (planilha), **PPT/PPTX (apresentação)**, **`.ipynb` (notebook Jupyter)** e **imagens** (`.png/.jpg/.jpeg/.gif/.bmp/.webp/.tiff`) — ver revisão 2026-07-10. Extração e chunking por família:
   - texto/markdown: direto;
   - PDF/DOCX: extração de texto por parser;
   - HTML: extração do conteúdo textual (remover marcação);
   - XLS/XLSX: serialização por aba/linha em texto;
-  - `.py`: chunking por blocos lógicos preservando contexto.
+  - `.py`: chunking por blocos lógicos preservando contexto;
+  - PPT/PPTX: texto por slide (título + corpo + notas); imagens dos slides via vision best-effort (ADR-0012);
+  - `.ipynb`: markdown + código das células (saídas textuais opcionais), na ordem do notebook;
+  - imagens: descrição textual via vision (ADR-0012); sem vision, fallback para o nome do arquivo.
   - Chunk máximo deve caber no contexto do embedding (< 2048 tokens); default ~512 tokens, overlap ~64.
 - **Infra containerizada — Podman/Docker.** `PostgreSQL` e `Milvus` sobem juntos via `compose` em `ops/`. Runtime alvo: **Podman** (`podman compose`), compatível com o `docker-compose.yml` padrão. Conexões (host/porta) configuráveis no backend.
 
@@ -42,3 +45,5 @@ A POC precisa fixar o contrato do índice (modelo/dimensão/métrica de embeddin
 aceita
 
 > Revisão 2026-07-09: embeddings migrados de `sentence-transformers`/bge-m3 (1024) para `embeddinggemma-300m` (768) servido pelo LM Studio; Postgres adicionado ao compose containerizado (Podman). Decisão anterior nunca chegou a implementação.
+>
+> Revisão 2026-07-10 (WORK-007): formatos aceitos estendidos para **PPT/PPTX**, **`.ipynb`** e **imagens** (`.png/.jpg/.jpeg/.gif/.bmp/.webp/.tiff`). PPTX via `python-pptx` (texto por slide + notas; imagens via vision — ADR-0012); `.ipynb` via parse do JSON (células markdown + código, saídas textuais opcionais); imagens via vision (fallback = nome do arquivo quando vision desligado/falha). Sem mudança no contrato de embeddings (modelo/dimensão/métrica) nem no índice Milvus.

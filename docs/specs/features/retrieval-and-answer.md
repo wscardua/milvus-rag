@@ -1,15 +1,15 @@
 ---
 id: FEAT-QUERY-001
 title: Consulta e Resposta com Citações
-version: 0.6.0
+version: 0.7.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-10
 contracts: [query-and-citations]
 depends_on: [FEAT-INGEST-001]
-adrs: [ADR-0001, ADR-0002, ADR-0005, ADR-0007, ADR-0008, ADR-0011]
+adrs: [ADR-0001, ADR-0002, ADR-0005, ADR-0007, ADR-0008, ADR-0011, ADR-0014]
 ---
 
 # Feature — Consulta e Resposta com Citações
@@ -26,6 +26,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - Retrieval top-k no Milvus e montagem de contexto.
 - **Expansão por vínculos (ADR-0008):** 1 salto seguindo `document_link` — inclui alvos de `esclarece`/`complementa`/`precede`; exclui alvos de `substitui` (obsoletos).
 - Geração de resposta com citações (documento/trecho) e **`linked_flow[]`** informando o fluxo de documentos vinculados considerados.
+- **Rebaixamento por vigência (ADR-0014):** documentos com `valid_until` no passado têm o score multiplicado por `retrieval_expired_score_factor` (default 0.5, por env) e os hits são reordenados pelo score ajustado — vencidos nunca são citados com a mesma relevância dos vigentes (rebaixados, não excluídos). Vale para `/query` e `/retrieve`.
 - Sinalização de "sem contexto suficiente".
 - **Auditoria da consulta (ADR-0011):** toda `/query` é gravada no `query_log` com métricas (scores, modelos, params de chunking, latência); a resposta traz `query_id`.
 - **Feedback 👍/👎** da resposta (`POST /query/{query_id}/feedback`) para avaliar qualidade e azeitar modelo/chunk.
@@ -44,7 +45,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 1. (Django) Usuário envia uma pergunta (com filtros opcionais).
 2. (FastAPI → LM Studio) Gera embedding da pergunta com `embeddinggemma-300m` (mesmo modelo do índice).
 3. (FastAPI → Milvus) Busca top-k (default 5) por similaridade COSINE, aplicando filtros por metadado.
-4. (FastAPI → Postgres) Recupera os chunks correspondentes; **expande 1 salto** pelos `document_link` dos documentos recuperados (inclui `esclarece`/`complementa`/`precede`; exclui `substitui`) e monta o contexto (deduplicando, respeitando limite).
+4. (FastAPI → Postgres) Recupera os chunks correspondentes; **rebaixa hits de documentos vencidos** (`valid_until < hoje` → score × `retrieval_expired_score_factor`) e reordena pelo score ajustado (ADR-0014); **expande 1 salto** pelos `document_link` dos documentos recuperados (inclui `esclarece`/`complementa`/`precede`; exclui `substitui`) e monta o contexto (deduplicando, respeitando limite).
 5. (FastAPI → LM Studio) Gera a resposta (API OpenAI-compatível) e anexa `citations[]` (documento, chunk, trecho, score) e `linked_flow[]` (vínculos considerados/excluídos).
 6. (Django) Exibe resposta, citações e o fluxo de documentos relacionados.
 ### Fluxos alternativos e de erro
@@ -58,6 +59,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - Sem contexto suficiente, sinalizar em vez de inventar.
 - Consulta usa o mesmo modelo de embeddings da indexação (`embeddinggemma-300m`).
 - Expansão por vínculos é de **1 salto** e respeita o tipo: `substitui` nunca entra no contexto (conteúdo obsoleto). O grafo de vínculos vive no Postgres; Milvus não muda (ADR-0008).
+- Vigência (ADR-0014): documento é **vencido** quando `valid_until IS NOT NULL AND valid_until < hoje` (data, UTC). Vencidos são **rebaixados** (score ajustado), não excluídos — preserva grounding quando só há material vencido. O `query_log.scores` grava o score ajustado (o efetivamente usado). Sem mudança no índice Milvus.
 - Conteúdo dos chunks (inclusive dos documentos expandidos) é entrada não confiável ao montar o prompt (mitigar prompt injection).
 
 ## 7. Contratos e integrações
@@ -93,7 +95,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 - LM Studio ativo (API OpenAI-compatível) para embedding da pergunta e geração — modelos de embedding e chat carregados.
 
 ## 13. Decisões relacionadas (ADRs)
-- ADR-0001 — stack. ADR-0002 — embeddings locais e LLM via LM Studio. ADR-0007 — filtros por squad/processo. ADR-0008 — expansão de retrieval por vínculos + `linked_flow[]`. ADR-0011 — `query_log` (auditoria + métricas) e feedback 👍/👎.
+- ADR-0001 — stack. ADR-0002 — embeddings locais e LLM via LM Studio. ADR-0007 — filtros por squad/processo. ADR-0008 — expansão de retrieval por vínculos + `linked_flow[]`. ADR-0011 — `query_log` (auditoria + métricas) e feedback 👍/👎. ADR-0014 — rebaixamento de documentos vencidos (`valid_until`) no retrieval.
 
 ## 14. Pendências e questões em aberto
 - Calibrar limiar de similaridade COSINE para "sem contexto suficiente" (`top_k` default 5 já fixado). O `query_log` (scores/rating/latency) agora fornece dados para essa calibração.
@@ -102,6 +104,7 @@ Com documentos ingeridos e indexados, o usuário precisa perguntar e receber res
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-10 | 0.7.0 | - | Rebaixamento de documentos vencidos (`valid_until`) no retrieval — score × `retrieval_expired_score_factor`, reordenação; vale p/ `/query` e `/retrieve` | WORK-007, ADR-0014 |
 | 2026-07-09 | 0.6.0 | - | Endpoint `POST /retrieve` (retrieval puro, sem geração) para o MCP; reusa o retrieval de `/query` sem gravar `query_log` | WORK-004, ADR-0005 |
 | 2026-07-09 | 0.5.0 | - | `query_log` (toda consulta + métricas de tuning) e feedback 👍/👎; `query_id` na resposta | WORK-003, ADR-0011 |
 | 2026-07-09 | 0.4.0 | - | Filtros por squad/processo; expansão de retrieval por vínculos (1 salto, `substitui` excluído) + `linked_flow[]` na resposta | ADR-0007, ADR-0008 |

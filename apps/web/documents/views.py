@@ -13,21 +13,30 @@ from core import client
 PREVIEWABLE_EXTS = ("pdf", "txt", "md", "html", "htm")
 
 
+PAGE_SIZE = 20  # itens por página na listagem (paginação — WORK-007)
+
+
 def document_list(request):
     filters = {
         k: request.GET.get(k)
-        for k in ("squad_id", "delivery_process_id", "category_id", "doc_type")
+        for k in ("squad_id", "delivery_process_id", "delivery_phase", "category_id", "doc_type")
         if request.GET.get(k)
     }
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except ValueError:
+        page = 1
+    params = {**filters, "limit": PAGE_SIZE, "offset": (page - 1) * PAGE_SIZE}
     try:
         squads = client.get("/squads")
         categories = client.get("/categories")
         doc_types = client.get("/doc-types")
+        phases = client.get("/delivery-phases")
         processes = client.get("/delivery-processes")
-        docs = client.get("/documents", params=filters or None)
+        docs, total = client.get_paginated("/documents", params=params)
     except client.ApiError as exc:
         messages.error(request, str(exc.detail))
-        squads, categories, doc_types, processes, docs = [], [], [], [], []
+        squads, categories, doc_types, phases, processes, docs, total = [], [], [], [], [], [], 0
 
     squad_names = {s["id"]: s["name"] for s in squads}
     cat_names = {c["id"]: c["name"] for c in categories}
@@ -36,6 +45,10 @@ def document_list(request):
         d["squad_name"] = squad_names.get(d.get("squad_id"), "—")
         d["category_name"] = cat_names.get(d.get("category_id"))
         d["process_name"] = proc_names.get(d.get("delivery_process_id"))
+
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    querystring = request.GET.copy()
+    querystring.pop("page", None)
     return render(
         request,
         "documents/list.html",
@@ -44,7 +57,15 @@ def document_list(request):
             "squads": squads,
             "categories": categories,
             "doc_types": doc_types,
+            "phases": phases,
+            "processes": processes,
             "filters": filters,
+            "page": page,
+            "total": total,
+            "total_pages": total_pages,
+            "has_prev": page > 1,
+            "has_next": page < total_pages,
+            "base_qs": querystring.urlencode(),
             "nav": "documentos",
         },
     )
@@ -62,7 +83,8 @@ def document_upload(request):
             "delivery_process_id": request.POST.get("delivery_process_id", ""),
             "doc_type": doc_type,
         }
-        for field in ("author", "tags", "title"):
+        # opcionais (ADR-0014: delivery_phase/valid_until) — só enviados quando preenchidos
+        for field in ("author", "tags", "title", "delivery_phase", "valid_until"):
             value = request.POST.get(field, "").strip()
             if value:
                 data[field] = value
@@ -82,10 +104,11 @@ def document_upload(request):
     try:
         squads = client.get("/squads")
         doc_types = client.get("/doc-types")
+        phases = client.get("/delivery-phases")
         processes = client.get("/delivery-processes")
     except client.ApiError as exc:
         messages.error(request, str(exc.detail))
-        squads, doc_types, processes = [], [], []
+        squads, doc_types, phases, processes = [], [], [], []
     procs_by_squad: dict[str, list] = {}
     for p in processes:
         procs_by_squad.setdefault(p["squad_id"], []).append({"id": p["id"], "name": p["name"]})
@@ -95,6 +118,7 @@ def document_upload(request):
         {
             "squads": squads,
             "doc_types": doc_types,
+            "phases": phases,
             "procs_by_squad": procs_by_squad,
             "nav": "upload",
         },
@@ -114,6 +138,14 @@ def document_detail(request, document_id):
                 }
                 client.patch(f"/documents/{document_id}", json=payload)
                 messages.success(request, "Classificação salva.")
+            elif action == "save_delivery":
+                # Metadados de ciclo de entrega (ADR-0014) — não alteram classification_source
+                payload = {
+                    "delivery_phase": request.POST.get("delivery_phase") or None,
+                    "valid_until": request.POST.get("valid_until") or None,
+                }
+                client.patch(f"/documents/{document_id}", json=payload)
+                messages.success(request, "Fase/vigência salvas.")
             elif action == "add_link":
                 client.post(
                     f"/documents/{document_id}/links",
@@ -139,6 +171,7 @@ def document_detail(request, document_id):
         links = client.get(f"/documents/{document_id}/links")
         categories = client.get("/categories")
         link_types = client.get("/link-types")
+        phases = client.get("/delivery-phases")
         squads = client.get("/squads")
         processes = client.get("/delivery-processes")
         # subcategorias por categoria (embed p/ select dependente no cliente)
@@ -176,6 +209,7 @@ def document_detail(request, document_id):
             "subcats": subcats,
             "current_subcats": subcats.get(doc.get("category_id"), []),
             "link_types": link_types,
+            "phases": phases,
             "candidates": candidates,
             "nav": "documentos",
         },

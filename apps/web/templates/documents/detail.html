@@ -37,6 +37,26 @@
 </div>
 
 <form method="post" class="tile">
+  <input type="hidden" name="action" value="save_delivery">
+  <h3>Ciclo de entrega <span class="ai-hint" style="margin:0">entrada do usuário</span></h3>
+  <div class="row">
+    <div class="field">
+      <label>Fase de delivery</label>
+      <select class="select" name="delivery_phase">
+        <option value="">—</option>
+        {% for ph in phases %}<option value="{{ ph }}" {% if ph == doc.delivery_phase %}selected{% endif %}>{{ ph }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Vigência até (valid_until)</label>
+      <input class="input" type="date" name="valid_until" value="{{ doc.valid_until|default:'' }}">
+      <div class="helper">Após esta data, o documento é rebaixado no retrieval (não excluído).</div>
+    </div>
+  </div>
+  <button class="btn btn--primary" type="submit">Salvar fase/vigência</button>
+</form>
+
+<form method="post" class="tile">
   <input type="hidden" name="action" value="save_classification">
   <h2>Título, classificação &amp; resumo <span class="ai-hint">sugerido pela IA — edite se necessário</span></h2>
   <div class="field">

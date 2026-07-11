@@ -10,11 +10,13 @@ import logging
 import os
 
 from app.config import settings
+from app.db.models import IMAGE_EXTENSIONS
 from app.domain.ingestion.errors import PermanentIngestionError
 
 log = logging.getLogger("worker.extract")
 
 _TEXT_EXT = {".txt", ".md", ".py"}
+_IMAGE_EXT = set(IMAGE_EXTENSIONS)
 
 
 def extract_text(path: str, filename: str) -> str:
@@ -31,6 +33,14 @@ def extract_text(path: str, filename: str) -> str:
             return _extract_docx(path, fname)
         if ext in {".xls", ".xlsx"}:
             return _extract_xlsx(path)
+        if ext == ".pptx":
+            return _extract_pptx(path, fname)
+        if ext == ".ppt":  # formato legado (OLE) não lido pelo python-pptx
+            raise PermanentIngestionError("Formato .ppt legado não suportado — converta para .pptx.")
+        if ext == ".ipynb":
+            return _extract_ipynb(path)
+        if ext in _IMAGE_EXT:
+            return _extract_image(path, fname)
     except PermanentIngestionError:
         raise
     except Exception as exc:  # parser falhou → arquivo provavelmente inválido (permanente)
@@ -181,3 +191,99 @@ def _extract_xlsx(path: str) -> str:
             if cells:
                 lines.append(" | ".join(cells))
     return "\n".join(lines)
+
+
+def _extract_pptx(path: str, filename: str) -> str:
+    """Texto por slide (título/corpo/tabelas + notas). Imagens dos slides via vision best-effort (ADR-0012)."""
+    from pptx import Presentation
+
+    prs = Presentation(path)
+    parts: list[str] = []
+    for idx, slide in enumerate(prs.slides, start=1):
+        parts.append(f"# Slide {idx}")
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                text = shape.text_frame.text.strip()
+                if text:
+                    parts.append(text)
+            if shape.has_table:
+                for row in shape.table.rows:
+                    cells = [c.text for c in row.cells]
+                    if any(cells):
+                        parts.append(" | ".join(cells))
+            if settings.vision_enabled:
+                desc = _describe_pptx_picture(shape, filename, idx)
+                if desc:
+                    parts.append(f"[Imagem — slide {idx}: {desc}]")
+        if slide.has_notes_slide:
+            notes = slide.notes_slide.notes_text_frame.text.strip()
+            if notes:
+                parts.append(f"[Notas do slide {idx}: {notes}]")
+    return "\n".join(parts)
+
+
+def _describe_pptx_picture(shape, filename: str, slide_num: int) -> str:
+    """Descrição de uma imagem de slide — best-effort (só shapes do tipo Picture têm `.image`)."""
+    from app.services import vision
+
+    try:
+        blob = shape.image.blob  # AttributeError em shapes que não são imagem
+    except (AttributeError, Exception):  # noqa: BLE001 — imagem problemática não interrompe o slide
+        return ""
+    return vision.describe_image(blob, filename, f"slide {slide_num}")
+
+
+def _extract_ipynb(path: str) -> str:
+    """Notebook Jupyter: células markdown + código (com saídas textuais), na ordem do notebook."""
+    import json
+
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        nb = json.load(f)
+
+    def _joined(src) -> str:
+        return ("".join(src) if isinstance(src, list) else (src or "")).strip()
+
+    parts: list[str] = []
+    for cell in nb.get("cells", []):
+        ctype = cell.get("cell_type")
+        src = _joined(cell.get("source", ""))
+        if ctype == "markdown" and src:
+            parts.append(src)
+        elif ctype == "code":
+            if src:
+                parts.append(f"```\n{src}\n```")
+            for out in cell.get("outputs", []):
+                text = _joined(out.get("text", ""))  # stream
+                if not text:
+                    text = _joined(out.get("data", {}).get("text/plain", ""))  # execute_result/display_data
+                if text:
+                    parts.append(f"[Saída]: {text}")
+    return "\n\n".join(parts)
+
+
+def _extract_image(path: str, filename: str) -> str:
+    """Imagem como documento próprio: descrição textual via vision (ADR-0012).
+
+    Sem vision (ou em falha), degrada para um placeholder com o nome do arquivo — o
+    documento ainda é indexável, apenas sem conteúdo semântico da imagem.
+    """
+    if not settings.vision_enabled:
+        return f"[Imagem: {filename}]"
+    from app.services import vision
+
+    png = _image_file_to_png(path)
+    desc = vision.describe_image(png, filename, "imagem") if png else ""
+    return f"[Imagem — {filename}: {desc}]" if desc else f"[Imagem: {filename}]"
+
+
+def _image_file_to_png(path: str) -> bytes | None:
+    """Converte um arquivo de imagem para PNG (casa com o MIME enviado ao vision). None em falha."""
+    import fitz  # PyMuPDF
+
+    try:
+        pix = fitz.Pixmap(path)
+        if pix.n - pix.alpha >= 4:  # CMYK/separação → RGB para gerar PNG válido
+            pix = fitz.Pixmap(fitz.csRGB, pix)
+        return pix.tobytes("png")
+    except Exception:  # noqa: BLE001 — imagem ilegível vira placeholder no chamador
+        return None

@@ -84,6 +84,8 @@ hr{border:none;border-top:1px solid var(--gray-20);}
 .table-toolbar{display:flex;gap:1px;background:var(--white);border:1px solid var(--gray-20);border-bottom:none;flex-wrap:wrap;}
 .table-toolbar form{display:flex;flex:1;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.5rem 1rem;}
 .table-toolbar .select,.table-toolbar .input{max-width:200px;background:var(--gray-10);}
+.pagination{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem 1rem;background:var(--white);border:1px solid var(--gray-20);border-top:none;}
+.pagination [disabled]{opacity:.4;pointer-events:none;}
 table{width:100%;border-collapse:collapse;background:var(--white);border:1px solid var(--gray-20);}
 thead th{text-align:left;font-size:14px;font-weight:600;color:var(--gray-100);background:var(--gray-10);padding:14px 16px;border-bottom:1px solid var(--gray-20);}
 tbody td{padding:14px 16px;border-bottom:1px solid var(--gray-20);color:var(--gray-90);vertical-align:top;}

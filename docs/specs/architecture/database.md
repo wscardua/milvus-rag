@@ -13,7 +13,7 @@ Taxonomia (ADR-0007, tabelas de referência — não ENUM nativo):
 - `subcategory` — subcategoria (FK `category_id`; unique `category_id`+`name`).
 
 Núcleo:
-- `document` — arquivo + metadados. Vínculo `delivery_process_id` (FK `RESTRICT`, **NOT NULL**; squad vem por join). Metadados do usuário: `author`, `tags text[]`, `doc_type`, dados do arquivo. Campos **sugeridos por IA e editáveis** (ADR-0007): `title` (opcional no upload), `category_id`, `subcategory_id`, `summary`, com `classification_source` (`llm`|`user`). Timestamps + `ingested_at` (quando `indexed`).
+- `document` — arquivo + metadados. Vínculo `delivery_process_id` (FK `RESTRICT`, **NOT NULL**; squad vem por join). Metadados do usuário: `author`, `tags text[]`, `doc_type`, `delivery_phase` (fase do ciclo de entrega — lista fechada, opcional, ADR-0014), `valid_until` (`date`, opcional — vigência; após a data o documento é rebaixado no retrieval, ADR-0014), dados do arquivo. Campos **sugeridos por IA e editáveis** (ADR-0007): `title` (opcional no upload), `category_id`, `subcategory_id`, `summary`, com `classification_source` (`llm`|`user`). Timestamps + `ingested_at` (quando `indexed`).
 - `document_link` (ADR-0008) — auto-relação N:N direcionada e tipada: `source_document_id`, `target_document_id` (FK → `document`), `link_type` (`esclarece`/`complementa`/`precede`/`substitui`), `ordinal`. Restrição: fonte e alvo na **mesma squad**; sem auto-vínculo; unique (`source`,`target`,`link_type`).
 - `chunk` — texto do trecho, posição/ordem, FK para `document`, id do vetor no Milvus.
 - `ingestion_job` — estado (`pending`/`processing`/`indexed`/`failed`), `error`, timestamps + campos de fila (ADR-0009): `attempts`, `started_at`, `heartbeat_at`, `available_at`.

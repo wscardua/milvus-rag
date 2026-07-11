@@ -10,6 +10,8 @@ Entre Django (UI) e FastAPI (`POST /query`, `POST /query/{query_id}/feedback`) e
 
 Parâmetros de retrieval: `top_k` default 5; abaixo de um **limiar de similaridade** (COSINE, valor a calibrar) a API responde "sem contexto suficiente" em vez de gerar. Geração feita pelo LM Studio (API OpenAI-compatível).
 
+**Vigência (ADR-0014):** documentos com `valid_until` no passado são **rebaixados** — o score é multiplicado por `retrieval_expired_score_factor` (config, default 0.5) e os hits são reordenados pelo score ajustado antes do limiar. Vencidos não são excluídos, apenas perdem relevância; o `score` reportado nas citações e o `query_log.scores` refletem o valor ajustado. Vale para `/query` e `/retrieve`.
+
 ## Resposta
 
 - `query_id` (ADR-0011): id do `query_log` desta consulta — âncora do feedback.

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,11 +23,14 @@ class LinkOut(BaseModel):
 
 
 class DocumentUpdate(BaseModel):
-    """PATCH /documents/{id} — overrides dos campos sugeridos pela IA (ADR-0007)."""
+    """PATCH /documents/{id} — overrides de classificação (ADR-0007) + metadados de entrega (ADR-0014)."""
     title: str | None = Field(default=None, max_length=500)
     category_id: uuid.UUID | None = None
     subcategory_id: uuid.UUID | None = None
     summary: str | None = None
+    # Ciclo de entrega (ADR-0014) — entrada do usuário, não altera classification_source
+    delivery_phase: str | None = Field(default=None, max_length=60)
+    valid_until: date | None = None
 
 
 class DocumentOut(BaseModel):
@@ -39,6 +42,8 @@ class DocumentOut(BaseModel):
     author: str | None = None
     tags: list[str] = []
     doc_type: str | None = None
+    delivery_phase: str | None = None
+    valid_until: date | None = None
     original_filename: str | None = None
     mime_type: str | None = None
     size_bytes: int | None = None

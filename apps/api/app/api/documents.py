@@ -4,10 +4,11 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.links import create_document_link
@@ -16,6 +17,7 @@ from app.config import settings
 from app.db.base import get_session
 from app.db.models import (
     ALLOWED_EXTENSIONS,
+    DELIVERY_PHASES,
     DOC_TYPES,
     Category,
     DeliveryProcess,
@@ -36,6 +38,8 @@ def upload_document(
     title: str | None = Form(None),
     author: str | None = Form(None),
     doc_type: str = Form(...),  # obrigatório (ADR-0013): orienta o perfil de chunking na ingestão
+    delivery_phase: str | None = Form(None),  # opcional (ADR-0014): fase do ciclo de entrega
+    valid_until: date | None = Form(None),  # opcional (ADR-0014): data ISO; após ela → rebaixado no retrieval
     tags: str | None = Form(None),  # separadas por vírgula
     links: str | None = Form(None),  # JSON: [{"target_document_id","link_type","ordinal"}]
     session: Session = Depends(get_session),
@@ -46,6 +50,9 @@ def upload_document(
 
     if doc_type not in DOC_TYPES:
         raise HTTPException(422, f"doc_type inválido. Use um de {DOC_TYPES}.")
+
+    if delivery_phase is not None and delivery_phase not in DELIVERY_PHASES:
+        raise HTTPException(422, f"delivery_phase inválida. Use uma de {DELIVERY_PHASES}.")
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -65,6 +72,8 @@ def upload_document(
         author=author,
         tags=tag_list,
         doc_type=doc_type,
+        delivery_phase=delivery_phase,
+        valid_until=valid_until,
         original_filename=file.filename,
         mime_type=file.content_type,
         size_bytes=size_bytes,
@@ -89,26 +98,37 @@ def upload_document(
 
 @router.get("/documents", response_model=list[DocumentOut])
 def list_documents(
+    response: Response,
     squad_id: uuid.UUID | None = None,
     delivery_process_id: uuid.UUID | None = None,
+    delivery_phase: str | None = None,  # ADR-0014 (filtro no Postgres, não no Milvus)
     category_id: uuid.UUID | None = None,
     doc_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     session: Session = Depends(get_session),
 ):
-    stmt = select(Document).order_by(Document.created_at.desc())
+    stmt = select(Document)
     if squad_id:
         stmt = stmt.join(DeliveryProcess, Document.delivery_process_id == DeliveryProcess.id).where(
             DeliveryProcess.squad_id == squad_id
         )
     if delivery_process_id:
         stmt = stmt.where(Document.delivery_process_id == delivery_process_id)
+    if delivery_phase:
+        stmt = stmt.where(Document.delivery_phase == delivery_phase)
     if category_id:
         stmt = stmt.where(Document.category_id == category_id)
     if doc_type:
         stmt = stmt.where(Document.doc_type == doc_type)
-    docs = session.scalars(stmt.limit(min(limit, 200)).offset(offset)).all()
+
+    # Total do recorte (sem paginação) → X-Total-Count para a UI paginar (contrato upload-and-metadata)
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    response.headers["X-Total-Count"] = str(total)
+
+    docs = session.scalars(
+        stmt.order_by(Document.created_at.desc()).limit(min(limit, 200)).offset(offset)
+    ).all()
     return [to_document_out(session, d) for d in docs]
 
 
@@ -138,6 +158,8 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
         eff_cat = data.get("category_id", doc.category_id)
         if eff_cat is not None and sub.category_id != eff_cat:
             raise HTTPException(422, "Subcategoria não pertence à categoria informada.")
+    if data.get("delivery_phase") is not None and data["delivery_phase"] not in DELIVERY_PHASES:
+        raise HTTPException(422, f"delivery_phase inválida. Use uma de {DELIVERY_PHASES}.")
 
     # trocar categoria sem informar subcategoria zera a subcategoria (evita par inconsistente)
     if "category_id" in data and "subcategory_id" not in data:
@@ -145,8 +167,10 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
 
     for field, value in data.items():
         setattr(doc, field, value)
-    if data:
-        doc.classification_source = "user"  # override do usuário (ADR-0007)
+    # Override de classificação (ADR-0007) marca classification_source=user; editar só
+    # delivery_phase/valid_until (entrada do usuário — ADR-0014) NÃO altera classification_source.
+    if data.keys() & {"title", "category_id", "subcategory_id", "summary"}:
+        doc.classification_source = "user"
     session.commit()
     session.refresh(doc)
     return to_document_out(session, doc)

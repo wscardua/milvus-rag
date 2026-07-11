@@ -17,6 +17,7 @@ pypdf==5.1.0
 python-docx==1.1.2
 openpyxl==3.1.5
 beautifulsoup4==4.12.3
+python-pptx==1.0.2  # extração de PPTX (slides/notas/imagens) — ADR-0002 (rev. 2026-07-10)
 pymupdf==1.26.7  # extração de imagens do PDF p/ vision (ADR-0012); AGPL — trade-off aceito p/ POC
 
 # Testes

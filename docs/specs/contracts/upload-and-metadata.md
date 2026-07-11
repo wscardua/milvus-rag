@@ -4,15 +4,17 @@ Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /document
 
 ## Upload — requisição
 
-- `file`: arquivo (multipart). **Tipos permitidos:** PDF, DOCX, TXT/Markdown, HTML, `.py`, XLS/XLSX. Tamanho máximo definido pela API.
+- `file`: arquivo (multipart). **Tipos permitidos:** PDF, DOCX, TXT/Markdown, HTML, `.py`, XLS/XLSX, **PPT/PPTX**, **`.ipynb`**, **imagens** (`.png/.jpg/.jpeg/.gif/.bmp/.webp/.tiff`) — ADR-0002 (rev. 2026-07-10). Tamanho máximo definido pela API.
 - `metadata`: objeto com:
   - `delivery_process_id` (**obrigatório**, ADR-0007) — vincula o documento ao processo de delivery (e, por herança, à squad).
   - `title` (**opcional**, ADR-0007) — se vazio, a IA sugere na ingestão (fallback = nome do arquivo).
   - `doc_type` (**obrigatório**, ADR-0013) — deve pertencer à lista em [reference/taxonomy.md](../reference/taxonomy.md); orienta o perfil de chunking na ingestão. Não é sugerido pela IA.
+  - `delivery_phase` (**opcional**, ADR-0014) — fase do ciclo de entrega; deve pertencer à lista fechada em [reference/taxonomy.md](../reference/taxonomy.md) (§3).
+  - `valid_until` (**opcional**, ADR-0014) — data ISO (`YYYY-MM-DD`) até quando o documento é vigente; após essa data ele é rebaixado no retrieval.
   - `author`, `tags[]`.
   - `links[]` (**opcional**, ADR-0008) — vínculos iniciais (`target_document_id`, `link_type`); mesma squad.
 - **Não** aceita `category`/`subcategory`/`summary` no upload — são sugeridos pela ingestão (ver `PATCH` abaixo).
-- **Erros:** `422` quando `doc_type` está ausente ou não pertence à lista em [reference/taxonomy.md](../reference/taxonomy.md) (ADR-0013).
+- **Erros:** `422` quando `doc_type` está ausente ou não pertence à lista em [reference/taxonomy.md](../reference/taxonomy.md) (ADR-0013); `422` quando `delivery_phase` não pertence à lista fechada ou `valid_until` não é data ISO válida (ADR-0014); `415` para extensão não suportada.
 
 ## Upload — resposta
 
@@ -22,15 +24,16 @@ Entre Django (UI) e FastAPI (`POST /documents`, `GET /documents`, `GET /document
 
 ## Edição de classificação (overrides) — ADR-0007
 
-- `PATCH /documents/{id}` → altera os campos **sugeridos pela IA e editáveis pelo usuário**: `title`, `category_id`, `subcategory_id`, `summary`.
-- A API marca `classification_source = user` quando há override.
-- `subcategory_id` deve pertencer à `category_id` informada (taxonomia).
+- `PATCH /documents/{id}` → altera os campos **sugeridos pela IA e editáveis pelo usuário**: `title`, `category_id`, `subcategory_id`, `summary`, e também `delivery_phase`/`valid_until` (ADR-0014, entrada do usuário).
+- A API marca `classification_source = user` quando há override de **classificação** (`title`/`category`/`subcategory`/`summary`). Editar apenas `delivery_phase`/`valid_until` **não** altera `classification_source` (não fazem parte da classificação temática da IA).
+- `subcategory_id` deve pertencer à `category_id` informada (taxonomia). `delivery_phase` inválida ou `valid_until` não-ISO → `422`.
 - Gestão de vínculos do documento é feita pelo contrato `document-links` (ADR-0008).
 
 ## Estado / listagem
 
-- `GET /documents/{id}` → `document_id`, `status`, `metadata` (squad/processo, `category`/`subcategory`/`summary`, `classification_source`, `ingested_at`), `error?`, timestamps.
-- `GET /documents?filtro` → lista paginada com filtros por metadado, incluindo `squad`, `delivery_process`, `category`, `doc_type`, `status`.
+- `GET /documents/{id}` → `document_id`, `status`, `metadata` (squad/processo, `category`/`subcategory`/`summary`, `classification_source`, `delivery_phase`, `valid_until`, `ingested_at`), `error?`, timestamps.
+- `GET /documents?filtro` → lista paginada com filtros por metadado: `squad_id`, `delivery_process_id`, `delivery_phase` (ADR-0014), `category_id`, `doc_type`, `status`.
+  - **Paginação:** `limit` (default 50, máx 200) e `offset` (default 0). O total de itens do recorte (sem paginação) vem no cabeçalho de resposta **`X-Total-Count`**; o corpo permanece uma **lista** de documentos (retrocompatível). A UI usa o total para os controles de página.
 
 ## Acesso ao arquivo — ADR-0010
 

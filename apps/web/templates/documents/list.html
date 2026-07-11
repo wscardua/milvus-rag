@@ -13,6 +13,14 @@
       <option value="">Todas as squads</option>
       {% for s in squads %}<option value="{{ s.id }}" {% if filters.squad_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
     </select>
+    <select class="select" name="delivery_process_id" onchange="this.form.submit()">
+      <option value="">Todos os processos</option>
+      {% for p in processes %}<option value="{{ p.id }}" {% if filters.delivery_process_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    </select>
+    <select class="select" name="delivery_phase" onchange="this.form.submit()">
+      <option value="">Todas as fases</option>
+      {% for ph in phases %}<option value="{{ ph }}" {% if filters.delivery_phase == ph %}selected{% endif %}>{{ ph }}</option>{% endfor %}
+    </select>
     <select class="select" name="category_id" onchange="this.form.submit()">
       <option value="">Todas as categorias</option>
       {% for c in categories %}<option value="{{ c.id }}" {% if filters.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
@@ -25,7 +33,7 @@
   </form>
 </div>
 <table>
-  <thead><tr><th>Título</th><th>Squad / Processo</th><th>Categoria</th><th>Status</th><th>Ingerido em</th></tr></thead>
+  <thead><tr><th>Título</th><th>Squad / Processo</th><th>Categoria</th><th>Fase</th><th>Vigência</th><th>Status</th><th>Ingerido em</th></tr></thead>
   <tbody>
     {% for d in documents %}
     <tr class="clickable" onclick="location.href='{% url 'document_detail' document_id=d.id %}'">
@@ -33,12 +41,22 @@
         <span class="sub">{{ d.doc_type|default:"—" }}</span></td>
       <td>{{ d.squad_name }}<span class="sub">{{ d.process_name|default:"—" }}</span></td>
       <td>{% if d.category_name %}{{ d.category_name }} <span class="ai-hint">IA</span>{% else %}—{% endif %}</td>
+      <td>{{ d.delivery_phase|default:"—" }}</td>
+      <td class="mono">{{ d.valid_until|default:"—" }}</td>
       <td><span class="badge badge--{{ d.status }}">{{ d.status }}</span></td>
       <td class="mono">{% if d.ingested_at %}{{ d.ingested_at|slice:":16" }}{% else %}—{% endif %}</td>
     </tr>
     {% empty %}
-    <tr><td colspan="5" class="empty">Nenhum documento. <a href="{% url 'upload' %}">Enviar o primeiro</a>.</td></tr>
+    <tr><td colspan="7" class="empty">Nenhum documento. <a href="{% url 'upload' %}">Enviar o primeiro</a>.</td></tr>
     {% endfor %}
   </tbody>
 </table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if has_prev %}<a class="btn btn--ghost btn--sm" href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ page|add:'-1' }}">← Anterior</a>{% else %}<span class="btn btn--ghost btn--sm" disabled>← Anterior</span>{% endif %}
+  <span class="sub">Página {{ page }} de {{ total_pages }} · {{ total }} documento{{ total|pluralize }}</span>
+  {% if has_next %}<a class="btn btn--ghost btn--sm" href="?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ page|add:'1' }}">Próxima →</a>{% else %}<span class="btn btn--ghost btn--sm" disabled>Próxima →</span>{% endif %}
+</div>
+{% endif %}
 {% endblock %}

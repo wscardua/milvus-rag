@@ -1,15 +1,15 @@
 ---
 id: FEAT-WEB-001
 title: Layout do Frontend (UI Django)
-version: 0.4.0
+version: 0.5.0
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-10
 contracts: [upload-and-metadata, query-and-citations, organization-admin, document-links, logs-and-health]
 depends_on: [FEAT-UPLOAD-001, FEAT-INGEST-001, FEAT-QUERY-001]
-adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008, ADR-0010, ADR-0011]
+adrs: [ADR-0001, ADR-0002, ADR-0003, ADR-0007, ADR-0008, ADR-0010, ADR-0011, ADR-0014]
 ---
 
 # Feature — Layout do Frontend (UI Django)
@@ -25,13 +25,13 @@ As specs de domínio (upload, ingestão, consulta) existem, mas não há camada 
 ## 3. Escopo
 ### Incluído
 - **Shell/layout base:** header de navegação (Carbon UI Shell), área de mensagens/notificações, identidade visual IBM Plex + tokens Carbon.
-- **Tela Documentos (listagem):** tabela com título, squad/processo, categoria (sugerida por IA), `status` (badge), data de ingestão; filtros por squad, processo, categoria, `doc_type`, `status`; paginação. Atualização de `status` por **polling** de `GET /documents`.
-- **Tela Upload:** seleção obrigatória de **Squad** e **Processo de Delivery** (selects dependentes); arquivo; `title` **opcional** (IA sugere); `author`, `doc_type`, `tags`; **vínculos iniciais opcionais** a documentos da mesma squad (tipo + alvo).
-- **Tela Detalhe:** vínculo (squad/processo) + metadados do usuário; bloco **Título, classificação & resumo** com `title`, `category`/`subcategory` (selects de enum dependentes) e `summary` — **pré-preenchidos com a sugestão da IA e editáveis** (salvar overrides); **seção "Fluxo de documentos vinculados"** (adicionar/remover vínculos tipados da mesma squad; `substitui` marcado como excluído da busca); exibição de `error` quando `failed`. **Ações do documento (ADR-0010):** **Visualizar** (modal com `<iframe>` para PDF/TXT/MD/HTML), **Baixar** (arquivo original) e **Excluir** (com confirmação — remove chunks/vetores/arquivo).
+- **Tela Documentos (listagem):** tabela com título, squad/processo, categoria (sugerida por IA), `status` (badge), data de ingestão, **fase de delivery** e **vigência (`valid_until`)**; filtros por squad, **processo (ADR-0007)**, **fase de delivery (ADR-0014)**, categoria, `doc_type`, `status`; **paginação funcional** (limit/offset + total via cabeçalho `X-Total-Count`; controles anterior/próxima). Atualização de `status` por **polling** de `GET /documents`.
+- **Tela Upload:** seleção obrigatória de **Squad** e **Processo de Delivery** (selects dependentes); arquivo; `title` **opcional** (IA sugere); `author`, `doc_type`, `tags`; **`delivery_phase`** (select da lista fechada, opcional) e **`valid_until`** (data, opcional) — ADR-0014; **vínculos iniciais opcionais** a documentos da mesma squad (tipo + alvo).
+- **Tela Detalhe:** vínculo (squad/processo) + metadados do usuário; bloco **Título, classificação & resumo** com `title`, `category`/`subcategory` (selects de enum dependentes) e `summary` — **pré-preenchidos com a sugestão da IA e editáveis** (salvar overrides); **`delivery_phase`** e **`valid_until`** editáveis (ADR-0014); **seção "Fluxo de documentos vinculados"** (adicionar/remover vínculos tipados da mesma squad; `substitui` marcado como excluído da busca); exibição de `error` quando `failed`. **Ações do documento (ADR-0010):** **Visualizar** (modal com `<iframe>` para PDF/TXT/MD/HTML), **Baixar** (arquivo original) e **Excluir** (com confirmação — remove chunks/vetores/arquivo).
 - **Tela Consulta:** pergunta, filtros **opcionais** por squad/processo/categoria/`doc_type`, `top_k` (avançado, default 5); exibição da resposta com **citações** (snippet, documento, score), o **fluxo de documentos relacionados** (`linked_flow[]`) e o estado "sem contexto suficiente". **Feedback 👍/👎 (ADR-0011)** da resposta (via fetch; opcional).
 - **Admin Squads:** CRUD de squads (nome, descrição).
 - **Admin Processos de Delivery:** CRUD de processos vinculados a uma squad.
-- **Tela Logs & Saúde (ADR-0011):** painel de saúde por serviço (Postgres/Milvus/LM Studio/worker) + fila de ingestão por estado; tabela de eventos do `system_log` com filtros por nível/componente. Consome `GET /health` e `GET /logs` (contrato `logs-and-health`).
+- **Tela Logs & Saúde (ADR-0011):** painel de saúde por serviço (Postgres/Milvus/LM Studio/worker) + fila de ingestão por estado; tabela de eventos do `system_log` com filtros por nível/componente e **paginação funcional** (limit/offset + `X-Total-Count`). Consome `GET /health` e `GET /logs` (contrato `logs-and-health`).
 
 ### Fora de escopo
 - Chunking, embeddings, retrieval, geração (domínio FastAPI / worker).
@@ -84,6 +84,7 @@ squad(id, name·unique, description, timestamps)
   └─< delivery_process(id, squad_id→squad RESTRICT, name, description, timestamps, unique[squad_id,name])
         └─< document(id, delivery_process_id→delivery_process RESTRICT NOT NULL,
                      title, author, doc_type, tags text[],
+                     delivery_phase, valid_until date,                   -- ADR-0014 (opcionais)
                      original_filename, mime_type, size_bytes, storage_path,
                      category_id→category, subcategory_id→subcategory,   -- IA sugere / usuário edita
                      summary, classification_source[llm|user],
@@ -138,6 +139,8 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 - **ADR-0008** (aceito): vínculos entre documentos (`document_link`, fluxo tipado, mesma squad) e expansão de retrieval de 1 salto + `linked_flow[]`.
 - **ADR-0010** (aceito): exclusão de documento e acesso ao arquivo (Visualizar/Baixar/Excluir no Detalhe; proxy do arquivo).
 - **ADR-0011** (aceito): feedback 👍/👎 na Consulta e tela Logs & Saúde (contrato `logs-and-health`).
+- **ADR-0014** (aceito): `delivery_phase` e `valid_until` no Upload/Detalhe e filtro por fase na listagem.
+- **ADR-0002** (rev. 2026-07-10): novos formatos aceitos no Upload (PPTX/`.ipynb`/imagens).
 
 ## 14. Pendências e questões em aberto
 - Taxonomia (categorias/subcategorias) e enum de `doc_type` definidos em [reference/taxonomy.md](../reference/taxonomy.md) — os selects consomem essa lista.
@@ -148,6 +151,7 @@ Decisões de modelagem: taxonomia via **tabelas de referência** (não ENUM nati
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-10 | 0.5.0 | - | Paginação funcional (Documentos+Logs); filtro por processo e por fase de delivery na listagem; `delivery_phase`/`valid_until` no Upload/Detalhe; novos formatos no Upload | WORK-007, ADR-0014, ADR-0002 (rev.) |
 | 2026-07-09 | 0.4.0 | - | 7ª tela (Logs & Saúde); Detalhe ganha Visualizar/Baixar/Excluir; feedback 👍/👎 na Consulta; contrato `logs-and-health`. Spec aprovada | WORK-003, ADR-0010, ADR-0011 |
 | 2026-07-09 | 0.3.0 | - | Título opcional/sugerido pela IA (editável); vínculos entre documentos no Detalhe/Upload; fluxo (`linked_flow[]`) na Consulta; contrato `document-links` | ADR-0007, ADR-0008 |
 | 2026-07-09 | 0.2.0 | - | ADR-0007 aceito e propagado (schema, arquitetura, contratos); contrato `organization-admin` referenciado; dependências resolvidas | ADR-0007 |

@@ -16,7 +16,8 @@ Resposta:
 ## Logs — `GET /logs`
 
 Lista eventos do `system_log`, mais recentes primeiro.
-- Filtros (query): `level` (`INFO`|`WARN`|`ERROR`), `component` (`api`|`worker`|`ingestion`|`retrieval`), `since` (ISO), `limit` (default 100, máx 500).
+- Filtros (query): `level` (`INFO`|`WARN`|`ERROR`), `component` (`api`|`worker`|`ingestion`|`retrieval`), `since` (ISO), `limit` (default 100, máx 500), `offset` (default 0).
+- **Paginação (WORK-007):** o total de eventos do recorte (sem paginação) vem no cabeçalho **`X-Total-Count`**; o corpo permanece uma **lista** de eventos. A UI usa o total para os controles de página.
 - Cada item: `id`, `ts`, `level`, `component`, `event`, `message`, `context` (objeto), `document_id?`, `job_id?`.
 
 ## Regras

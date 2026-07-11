@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -85,21 +85,27 @@ def health(session: Session = Depends(get_session)):
 
 @router.get("/logs")
 def list_logs(
+    response: Response,
     level: str | None = None,
     component: str | None = None,
     since: datetime | None = None,
     limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
     session: Session = Depends(get_session),
 ):
-    """Lista eventos do system_log, mais recentes primeiro, com filtros opcionais."""
-    stmt = select(SystemLog).order_by(SystemLog.ts.desc())
+    """Lista eventos do system_log, mais recentes primeiro, com filtros e paginação (WORK-007)."""
+    stmt = select(SystemLog)
     if level:
         stmt = stmt.where(SystemLog.level == level)
     if component:
         stmt = stmt.where(SystemLog.component == component)
     if since:
         stmt = stmt.where(SystemLog.ts >= since)
-    logs = session.scalars(stmt.limit(limit)).all()
+
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    response.headers["X-Total-Count"] = str(total)
+
+    logs = session.scalars(stmt.order_by(SystemLog.ts.desc()).limit(limit).offset(offset)).all()
     return [
         {
             "id": str(lg.id),
