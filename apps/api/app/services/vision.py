@@ -9,6 +9,7 @@ import base64
 import logging
 
 from app.config import settings
+from app.services import eventlog
 from app.services.lmstudio import client
 
 log = logging.getLogger("worker.vision")
@@ -72,4 +73,12 @@ def describe_image(image_bytes: bytes, filename: str, position: str) -> str:
     except Exception as exc:  # noqa: BLE001 — vision é best-effort; nunca interrompe a ingestão
         # Não logar o conteúdo da imagem (entrada não confiável); só a posição.
         log.warning("Descrição de imagem falhou (%s, %s): %s", filename, position, exc)
+        eventlog.log_event(
+            "WARNING",
+            "ingestion",
+            "llm_vision_failed",
+            str(exc),
+            filename=filename,
+            position=position,
+        )
         return ""

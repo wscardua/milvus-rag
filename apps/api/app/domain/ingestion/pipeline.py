@@ -17,7 +17,7 @@ from app.db.models import Category, Chunk, Document, Subcategory
 from app.domain.ingestion import classify, extract
 from app.domain.ingestion.chunking import chunk_text, chunk_params, has_profile
 from app.domain.ingestion.errors import PermanentIngestionError
-from app.services import embeddings, vectorstore
+from app.services import embeddings, eventlog, vectorstore
 
 log = logging.getLogger("worker.pipeline")
 
@@ -61,6 +61,13 @@ def _apply_classification(session: Session, doc: Document, text: str) -> None:
         doc.classification_source = "llm"
     except Exception as exc:  # noqa: BLE001 — classificação é best-effort
         log.warning("Classificação por IA falhou (segue sem): %s", exc)
+        eventlog.log_event(
+            "WARNING",
+            "ingestion",
+            "llm_classification_failed",
+            str(exc),
+            document_id=doc.id,
+        )
 
 
 def ingest_document(session: Session, doc: Document) -> IngestStats:
