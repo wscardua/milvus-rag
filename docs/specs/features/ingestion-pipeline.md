@@ -1,12 +1,12 @@
 ---
 id: FEAT-INGEST-001
 title: Pipeline de Ingestão
-version: 0.11.0
+version: 0.11.1
 status_spec: aprovada
 status_impl: implementada
 owner: -
 created: 2026-07-09
-updated: 2026-07-10
+updated: 2026-07-11
 contracts: [upload-and-metadata]
 depends_on: [FEAT-UPLOAD-001]
 adrs: [ADR-0001, ADR-0002, ADR-0004, ADR-0007, ADR-0009, ADR-0010, ADR-0011, ADR-0012, ADR-0013]
@@ -27,10 +27,10 @@ Após o upload (FEAT-UPLOAD-001), o documento é só um arquivo. Para responder 
 - **Chunking adaptativo por `doc_type` (ADR-0013, ADR-0006):** `size` e `overlap` configuráveis por variável de ambiente por tipo de documento; fallback para o default global (`chunk_size_words`/`chunk_overlap_words`) quando o `doc_type` não tem configuração específica (ex.: `Outro`) ou é `None`. Chunk < 2048 tokens do modelo.
 - **Log detalhado de ingestão (ADR-0011):** ao concluir, o worker registra o resumo do processamento no console e no evento `job_indexed` do `system_log` — no **`message`** (resumo legível, exibido na tela Logs & Saúde) e no **`context`** (mesmos campos estruturados, para consulta/tuning): `doc_type` + perfil aplicado (específico/fallback), tamanho do texto extraído, `chunk_size`/`overlap`, contagem de chunks e tokens por chunk (min/avg/max), nº de vetores, `vision_enabled` e `duration_ms`.
 - Geração de embeddings **em lote** com `embeddinggemma-300m` (768, COSINE) via LM Studio (`/v1/embeddings`).
-- **Classificação por IA (ADR-0007):** sugere `title` (quando vazio no upload), `category`/`subcategory` dentro da **taxonomia fixa** ([reference/taxonomy.md](../reference/taxonomy.md)) e gera `summary`, gravados no `document` com `classification_source = llm` (editável depois pelo usuário via `PATCH /documents/{id}`).
+- **Classificação por IA (ADR-0007):** sugere `title` (quando vazio no upload), `category`/`subcategory` dentro da **taxonomia fixa** ([reference/taxonomy.md](../reference/taxonomy.md)) e gera `summary`, gravados no `document` com `classification_source = llm` (editável depois pelo usuário via `PATCH /documents/{id}`). **Best-effort** (falha não interrompe a ingestão); falha registra evento `llm_classification_failed` no `system_log` (ADR-0011), além do log de console.
 - Indexação no Milvus (payload inclui `squad_id`/`delivery_process_id`/`category`/`subcategory`) e persistência dos chunks no Postgres.
 - Preenche `ingested_at` ao concluir; gestão de estado do `ingestion_job` e reprocessamento idempotente.
-- **Descrição de imagens por LLM vision (ADR-0012):** quando `VISION_ENABLED` (default `true`), imagens embutidas em **PDF e DOCX** são extraídas, descritas por um modelo vision via LM Studio (`VISION_MODEL`) e **intercaladas no texto** — formato `[Imagem — página N: …]` / `[Imagem — parágrafo N: …]` — antes do chunking. **Best-effort** (falha não interrompe a ingestão); sem mudança no contrato do índice nem no schema.
+- **Descrição de imagens por LLM vision (ADR-0012):** quando `VISION_ENABLED` (default `true`), imagens embutidas em **PDF e DOCX** são extraídas, descritas por um modelo vision via LM Studio (`VISION_MODEL`) e **intercaladas no texto** — formato `[Imagem — página N: …]` / `[Imagem — parágrafo N: …]` — antes do chunking. **Best-effort** (falha não interrompe a ingestão); sem mudança no contrato do índice nem no schema. Falha registra evento `llm_vision_failed` no `system_log` (ADR-0011), além do log de console.
 ### Fora de escopo
 - Retrieval e geração de resposta (ver FEAT-QUERY-001).
 - OCR (Tesseract) — fora da POC.
@@ -106,6 +106,7 @@ Processamento **assíncrono** por um **worker daemon** separado da API (ADR-0004
 ## 15. Histórico de atualizações
 | Data | Versão | Autor | Mudança | Ref (workflow/ADR) |
 |---|---|---|---|---|
+| 2026-07-11 | 0.11.1 | - | Falhas best-effort de LLM (classificação e vision) passam a registrar evento (`llm_classification_failed`/`llm_vision_failed`) no `system_log`/tela Logs & Saúde, não só no console | WORK-008, ADR-0011 |
 | 2026-07-10 | 0.11.0 | - | Extração para novos formatos: PPT/PPTX (slides+notas, imagens via vision), `.ipynb` (markdown+código) e imagens (via vision) | WORK-007, ADR-0002 (rev.) |
 | 2026-07-10 | 0.10.0 | - | Chunking adaptativo por doc_type: perfis size/overlap por tipo, todos configuráveis via env (fallback global) | WORK-006, ADR-0013 |
 | 2026-07-10 | 0.9.0 | - | Descrição de imagens por LLM vision (best-effort) intercalada no texto antes do chunking, em PDF e DOCX; habilitável por `VISION_ENABLED`; PyMuPDF para extrair imagens do PDF | WORK-005, ADR-0012 |
