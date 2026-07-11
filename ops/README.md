@@ -1,6 +1,6 @@
 # ops — Infra local (Podman)
 
-Sobe **PostgreSQL** (metadados do RAG) e **Milvus standalone** (índice vetorial, que requer **etcd** + **minio**).
+Sobe **PostgreSQL** (metadados do RAG), **Milvus standalone** (índice vetorial, que requer **etcd** + **minio**) e o **Attu** (GUI web opcional do Milvus).
 
 ## Pré-requisitos
 
@@ -13,7 +13,7 @@ Sobe **PostgreSQL** (metadados do RAG) e **Milvus standalone** (índice vetorial
 cd ops
 cp .env.example .env         # 1ª vez; ajuste credenciais/portas se quiser
 
-podman compose up -d         # sobe os 4 serviços
+podman compose up -d         # sobe os 5 serviços
 podman compose ps            # status + health
 podman compose logs -f milvus
 podman compose down          # PARA os serviços — PRESERVA os dados
@@ -53,6 +53,7 @@ tar czf backup-data.tgz -C .. data/volumes
 | Milvus | 19530 | gRPC (pymilvus) |
 | Milvus | 9091 | métricas / `healthz` |
 | MinIO | 9000 / 9001 | API / console web |
+| Attu | 3000 | GUI web do Milvus |
 
 ## Conexão a partir do backend (`apps/api`)
 
@@ -61,10 +62,4 @@ tar czf backup-data.tgz -C .. data/volumes
 
 ## Inspeção opcional (Attu — GUI do Milvus)
 
-Para inspecionar coleções, rode o Attu apontando para o Milvus:
-
-```bash
-podman run -d --name attu -p 8000:3000 \
-  -e MILVUS_URL=host.containers.internal:19530 zilliz/attu:latest
-# abra http://localhost:8000
-```
+Sobe junto com `podman compose up -d` (serviço `attu`, já apontando para `milvus:19530`). Abra `http://localhost:3000` (porta configurável via `ATTU_PORT`).
