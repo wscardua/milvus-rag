@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.links import create_document_link
-from app.api.serializers import to_document_out
+from app.api.serializers import fetch_links_summary, to_document_out
 from app.config import settings
 from app.db.base import get_session
 from app.db.models import (
@@ -25,7 +25,7 @@ from app.db.models import (
     IngestionJob,
     Subcategory,
 )
-from app.schemas.document import DocumentOut, DocumentUpdate, LinkIn
+from app.schemas.document import DocumentOut, DocumentUpdate, LinkIn, LinksSummary
 from app.services import eventlog, storage, vectorstore
 
 router = APIRouter(tags=["documents"])
@@ -133,7 +133,8 @@ def list_documents(
     docs = session.scalars(
         stmt.order_by(Document.created_at.desc()).limit(min(limit, 200)).offset(offset)
     ).all()
-    return [to_document_out(session, d) for d in docs]
+    summaries = fetch_links_summary(session, [d.id for d in docs])  # 1 query p/ a página, evita N+1
+    return [to_document_out(session, d, summaries.get(d.id, LinksSummary())) for d in docs]
 
 
 @router.get("/tags", response_model=list[str])

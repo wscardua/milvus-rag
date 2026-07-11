@@ -78,6 +78,8 @@ hr{border:none;border-top:1px solid var(--gray-20);}
 .tag{display:inline-flex;align-items:center;gap:.35rem;height:22px;padding:0 .5rem;border-radius:12px;font-size:12px;background:var(--gray-20);color:var(--gray-100);white-space:nowrap;}
 .tag--teal{background:var(--teal-20);color:#005d5d;}
 .tag--blue{background:var(--blue-20);color:var(--blue-70);}
+.link-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:12px;padding:.15rem .5rem;border-radius:12px;background:var(--gray-20);color:var(--gray-100);text-decoration:none;white-space:nowrap;}
+.link-badge--substitui{background:#fcf4d6;color:#8e6a00;}
 .ai-hint{display:inline-flex;align-items:center;gap:.35rem;font-size:12px;color:var(--purple-60);margin-left:.5rem;}
 .ai-hint::before{content:'\2726';}
 .suggested{border-left:2px solid var(--purple-60);}
