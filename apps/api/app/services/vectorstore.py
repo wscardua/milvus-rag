@@ -37,10 +37,11 @@ def _escape_tag_for_like(tag: str) -> str:
     """Sanitiza um valor de tag antes de embutir num `LIKE "%...%"`.
 
     Além do escaping de `"`/`\\`, remove `,` (delimitador — uma tag nunca contém vírgula,
-    pois já é o separador usado na entrada) e `%` (coringa do LIKE) do valor, para que um
-    filtro malicioso não altere a expressão nem vire um wildcard mais amplo do que o pedido.
+    pois já é o separador usado na entrada), `%` e `_` (coringas do LIKE — `_` casa 1
+    caractere qualquer, confirmado contra o Milvus real) do valor, para que um filtro
+    malicioso não altere a expressão nem vire um wildcard mais amplo do que o pedido.
     """
-    return _escape(tag).replace(_TAG_DELIMITER, "").replace("%", "")
+    return _escape(tag).replace(_TAG_DELIMITER, "").replace("%", "").replace("_", "")
 
 
 def _c() -> MilvusClient:

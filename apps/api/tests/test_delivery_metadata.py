@@ -168,6 +168,31 @@ def test_patch_tags_strips_and_drops_empty_entries(client, process_id):
         client.delete(f"/documents/{doc['id']}")
 
 
+def test_patch_tags_rejects_comma_in_value(client, process_id):
+    """Achado de code review: vírgula é o delimitador do payload dinâmico no Milvus
+    (vectorstore.serialize_tags) — uma tag com vírgula literal ficaria indistinguível de
+    duas tags separadas. Rejeitado com 422 em vez de corromper o índice silenciosamente."""
+    doc = _upload(client, process_id).json()
+    try:
+        resp = client.patch(f"/documents/{doc['id']}", json={"tags": ["foo,bar"]})
+        assert resp.status_code == 422, resp.text
+        # não altera o documento
+        assert client.get(f"/documents/{doc['id']}").json()["tags"] == []
+    finally:
+        client.delete(f"/documents/{doc['id']}")
+
+
+def test_patch_delivery_phase_empty_string_clears_like_null(client, process_id):
+    """Achado de code review: "" era rejeitado com 422 (só null limpava a fase)."""
+    doc = _upload(client, process_id, delivery_phase="Testes").json()
+    try:
+        resp = client.patch(f"/documents/{doc['id']}", json={"delivery_phase": ""})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["delivery_phase"] is None
+    finally:
+        client.delete(f"/documents/{doc['id']}")
+
+
 def test_patch_tags_does_not_touch_classification_source(client, process_id):
     doc = _upload(client, process_id).json()
     try:

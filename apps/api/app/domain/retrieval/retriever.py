@@ -36,7 +36,8 @@ def _map_filters(filters: dict | None) -> dict:
         if not v:
             continue
         if k == "tags":
-            out["tags"] = list(v)
+            # aceita string solta (1 tag) ou lista — nunca decompõe string em caracteres
+            out["tags"] = [v] if isinstance(v, str) else list(v)
         elif k in _FILTER_MAP:
             out[_FILTER_MAP[k]] = v
     return out

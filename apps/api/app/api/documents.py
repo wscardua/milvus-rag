@@ -169,6 +169,8 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
         eff_cat = data.get("category_id", doc.category_id)
         if eff_cat is not None and sub.category_id != eff_cat:
             raise HTTPException(422, "Subcategoria não pertence à categoria informada.")
+    if data.get("delivery_phase") == "":
+        data["delivery_phase"] = None  # "" e null são equivalentes: "sem fase" (limpa o campo)
     if data.get("delivery_phase") is not None and data["delivery_phase"] not in DELIVERY_PHASES:
         raise HTTPException(422, f"delivery_phase inválida. Use uma de {DELIVERY_PHASES}.")
 
@@ -178,6 +180,11 @@ def update_document(document_id: uuid.UUID, payload: DocumentUpdate, session: Se
 
     if "tags" in data:
         data["tags"] = [t.strip() for t in (data["tags"] or []) if t and t.strip()]
+        # vírgula é o delimitador usado ao serializar tags pro payload dinâmico do Milvus
+        # (vectorstore.serialize_tags) — uma tag com vírgula literal ficaria indistinguível
+        # de duas tags separadas (",foo,bar," seria igual pra "foo,bar" e para "foo"+"bar").
+        if any("," in t for t in data["tags"]):
+            raise HTTPException(422, "Tags não podem conter vírgula.")
 
     # Campos editados aqui que também vivem no payload do Milvus (ADR-0007/0015) precisam
     # ser resincronizados nos chunks já indexados — o PATCH só grava no Postgres por padrão

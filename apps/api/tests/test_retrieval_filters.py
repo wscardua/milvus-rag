@@ -1,7 +1,7 @@
 """WORK-010 / ADR-0015: filtros de retrieval por delivery_phase e tags (campo dinâmico Milvus).
 
 Unitário puro (sem tocar Milvus/Postgres): _map_filters (retriever) e _build_filter_expr
-(vectorstore). Integração real fica em test_query_filters_dynamic_fields.py.
+(vectorstore). Integração real fica em test_vectorstore_dynamic_fields.py.
 """
 from __future__ import annotations
 
@@ -27,6 +27,12 @@ def test_map_filters_empty_tags_list_dropped():
 def test_map_filters_combines_scalar_and_tags():
     out = _map_filters({"squad": "s1", "doc_type": "Outro", "tags": ["x"]})
     assert out == {"squad_id": "s1", "doc_type": "Outro", "tags": ["x"]}
+
+
+def test_map_filters_tags_as_bare_string_becomes_single_item_list():
+    """Achado de code review: list("billing") explodia a string em caracteres."""
+    out = _map_filters({"tags": "billing"})
+    assert out == {"tags": ["billing"]}
 
 
 def test_serialize_tags():
@@ -57,6 +63,13 @@ def test_build_filter_expr_single_tag_like():
 def test_build_filter_expr_multiple_tags_is_or():
     expr = _build_filter_expr({"tags": ["billing", "api"]})
     assert expr == '(tags like "%,billing,%" or tags like "%,api,%")'
+
+
+def test_build_filter_expr_strips_underscore_wildcard_from_tag():
+    """Achado de code review: `_` é coringa de 1 caractere no LIKE do Milvus (confirmado
+    contra o Milvus real) — sem remover, "a_b" também casaria com "axb"."""
+    expr = _build_filter_expr({"tags": ["a_b"]})
+    assert expr == '(tags like "%,ab,%")'
 
 
 def test_build_filter_expr_combines_scalar_delivery_phase_and_tags_with_and():
