@@ -88,3 +88,15 @@ services:
       minio:
         condition: service_healthy
     restart: unless-stopped
+
+  attu:
+    image: zilliz/attu:${ATTU_VERSION:-v2.5}
+    container_name: milvus-rag-attu
+    environment:
+      MILVUS_URL: milvus:19530
+    ports:
+      - "${ATTU_PORT:-3000}:3000"
+    depends_on:
+      milvus:
+        condition: service_healthy
+    restart: unless-stopped
