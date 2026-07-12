@@ -100,6 +100,31 @@ def _truncate_words(text: str, budget: int) -> str:
     return " ".join(words[:budget])
 
 
+def _assemble_context(
+    parts: list[tuple[dict | None, str]], budget: int
+) -> tuple[str, list[dict]]:
+    """Junta `parts` (hit-ou-None, texto) respeitando o orçamento de palavras (ADR-0017).
+
+    Ao contrário de truncar a string já concatenada (que fundiria dois trechos sem
+    separador visível), inclui só trechos inteiros até estourar o orçamento — preserva o
+    separador `---` entre trechos. Retorna também os `hits` que efetivamente entraram no
+    contexto, para que as citações nunca referenciem um trecho que não chegou a ser lido
+    pelo LLM (trechos de expansão por vínculo, sem `hit` associado, não geram citação).
+    """
+    included_texts: list[str] = []
+    included_hits: list[dict] = []
+    total = 0
+    for hit, text in parts:
+        n = len(text.split())
+        if included_texts and total + n > budget:
+            break
+        included_texts.append(text)
+        if hit is not None:
+            included_hits.append(hit)
+        total += n
+    return "\n\n---\n\n".join(included_texts), included_hits
+
+
 def _fetch_recent_questions(session: Session, conversation_id: uuid.UUID, limit: int) -> list[str]:
     """Últimas `limit` perguntas da conversa, ordem cronológica (mais antiga primeiro)."""
     rows = session.scalars(
@@ -266,14 +291,14 @@ def answer_query(
         expanded_texts.extend(c.text for c in extra)
 
     # contexto (base na ordem do ranking + expandidos), com orçamento de palavras (ADR-0017)
-    context_parts = [chunks[h["chunk_id"]].text for h in hits if h["chunk_id"] in chunks]
-    context_parts.extend(expanded_texts)
-    context = _truncate_words("\n\n---\n\n".join(context_parts), settings.context_budget_words)
+    base_parts = [(h, chunks[h["chunk_id"]].text) for h in hits if h["chunk_id"] in chunks]
+    expanded_parts = [(None, text) for text in expanded_texts]
+    context, cited_hits = _assemble_context(base_parts + expanded_parts, settings.context_budget_words)
 
     answer = _generate(effective_question, context, history_text)
 
     citations = []
-    for h in hits:
+    for h in cited_hits:
         c = chunks.get(h["chunk_id"])
         if c is not None:
             citations.append(
