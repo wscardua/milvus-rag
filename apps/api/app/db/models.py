@@ -245,6 +245,24 @@ class IngestionJob(TimestampMixin, Base):
     document: Mapped["Document"] = relationship(back_populates="ingestion_jobs")
 
 
+class Conversation(TimestampMixin, Base):
+    """Chat multi-turno para consulta ao acervo (ADR-0016, FEAT-QUERY-001).
+
+    `squad_id` é só conveniência para a UI pré-preencher o formulário — nunca é filtro
+    imposto pelo backend (filtros continuam vindo em cada `POST /query`, como no uso
+    stateless). `updated_at` (via `TimestampMixin`, `onupdate=func.now()`) é tocado a cada
+    turno gravado — ordena a sidebar por atividade recente. Sem `owner_id`: não há modelo
+    de usuário nesta POC (isolamento por usuário fica para um ADR futuro, se necessário).
+    """
+    __tablename__ = "conversation"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    title: Mapped[str | None] = mapped_column(Text)
+    squad_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("squad.id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class QueryLog(Base):
     """Auditoria de consulta + feedback de qualidade (ADR-0011, FEAT-QUERY-001).
 
@@ -252,11 +270,14 @@ class QueryLog(Base):
     `rating` é preenchido pelo feedback 👍/👎 do usuário (NULL = sem voto).
     Não há FK para chunk/document: os ids ficam como snapshot em colunas JSONB — a linha
     sobrevive à exclusão dos documentos (o histórico de avaliação não deve ser apagado).
+    `conversation_id`/`turn_index` (ADR-0016) são nullable — ausentes preserva o uso
+    stateless (MCP/API direta); `turn_index` é sempre calculado pelo servidor.
     """
     __tablename__ = "query_log"
     __table_args__ = (
         CheckConstraint("rating IS NULL OR rating IN (-1, 1)", name="ck_querylog_rating"),
         Index("ix_querylog_created", "created_at"),
+        Index("ix_querylog_conversation_turn", "conversation_id", "turn_index"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -284,6 +305,12 @@ class QueryLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    # Conversação multi-turno (ADR-0016) — nullable, preserva uso stateless
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("conversation.id", ondelete="SET NULL"), nullable=True
+    )
+    turn_index: Mapped[int | None] = mapped_column(Integer)
 
 
 class SystemLog(Base):

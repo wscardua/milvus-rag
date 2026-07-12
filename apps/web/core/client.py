@@ -12,18 +12,18 @@ class ApiError(Exception):
         super().__init__(f"{status}: {detail}")
 
 
-def _request(method: str, path: str, **kwargs):
-    resp = _raw_request(method, path, **kwargs)
+def _request(method: str, path: str, timeout: float = 60, **kwargs):
+    resp = _raw_request(method, path, timeout=timeout, **kwargs)
     if resp.status_code == 204 or not resp.content:
         return None
     return resp.json()
 
 
-def _raw_request(method: str, path: str, **kwargs):
+def _raw_request(method: str, path: str, timeout: float = 60, **kwargs):
     """Executa a requisição e devolve a resposta bruta (para ler headers, ex.: X-Total-Count)."""
     url = settings.API_BASE_URL.rstrip("/") + path
     try:
-        resp = httpx.request(method, url, timeout=60, **kwargs)
+        resp = httpx.request(method, url, timeout=timeout, **kwargs)
     except httpx.RequestError as exc:
         raise ApiError(0, f"API indisponível ({exc}).")
     if resp.status_code >= 400:
@@ -47,8 +47,8 @@ def get_paginated(path: str, params: dict | None = None) -> tuple[list, int]:
     return items, total
 
 
-def post(path: str, json: dict | None = None, data: dict | None = None, files=None):
-    return _request("POST", path, json=json, data=data, files=files)
+def post(path: str, json: dict | None = None, data: dict | None = None, files=None, timeout: float = 60):
+    return _request("POST", path, json=json, data=data, files=files, timeout=timeout)
 
 
 def patch(path: str, json: dict | None = None):

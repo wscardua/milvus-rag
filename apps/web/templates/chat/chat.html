@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Chat · Milvus RAG{% endblock %}
+{% block content %}
+<div class="chat">
+  <aside class="chat__sidebar">
+    <a href="{% url 'chat' %}" class="btn btn--secondary btn--sm chat__new">+ Nova conversa</a>
+    <nav class="chat__list">
+      {% for c in conversations %}
+        <a href="{% url 'chat_thread' conversation_id=c.id %}"
+           class="chat__item{% if conversation and c.id == conversation.id %} active{% endif %}">
+          {{ c.title|default:"Nova conversa" }}
+        </a>
+      {% empty %}
+        <div class="sub" style="padding:var(--s5)">Nenhuma conversa ainda.</div>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <div class="chat__main">
+    <div class="chat__thread">
+      {% if not conversation %}
+        <div class="empty">Envie uma pergunta abaixo para começar uma nova conversa.</div>
+      {% else %}
+        {% for t in conversation.turns %}
+          <div class="chat__msg chat__msg--question">{{ t.question }}</div>
+          {% if t.insufficient_context %}
+            <div class="notif notif--warning">
+              <div>⚠️</div>
+              <div><strong>Sem contexto suficiente</strong> — nenhuma resposta foi gerada para esta pergunta.</div>
+            </div>
+          {% else %}
+            <div class="chat__msg chat__msg--answer">
+              <div class="answer"><p>{{ t.answer }}</p></div>
+              {% if t.citations %}
+                <div class="chat__citations">
+                  {% for c in t.citations %}
+                    <a class="tag tag--blue" href="{% url 'document_detail' document_id=c.document_id %}"
+                       title="{{ c.snippet }}">📄 score {{ c.score }}</a>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <form method="post" class="chat__composer" id="chat-composer">
+      <textarea class="textarea" name="question" placeholder="Pergunte algo sobre o acervo..." required></textarea>
+      <button class="btn btn--primary" type="submit">Enviar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Feedback visual enquanto a resposta é gerada (pode levar dezenas de segundos —
+  // condensação de pergunta, ADR-0017, + geração). O POST continua um form submit normal
+  // (navegação de página inteira); isto só mostra que algo está acontecendo até a próxima
+  // página carregar.
+  document.getElementById('chat-composer').addEventListener('submit', function () {
+    const textarea = this.querySelector('textarea');
+    const btn = this.querySelector('button[type="submit"]');
+    if (!textarea.value.trim()) return;
+
+    const thread = document.querySelector('.chat__thread');
+    const empty = thread.querySelector('.empty');
+    if (empty) empty.remove();
+
+    const q = document.createElement('div');
+    q.className = 'chat__msg chat__msg--question';
+    q.textContent = textarea.value;
+    thread.appendChild(q);
+
+    const thinking = document.createElement('div');
+    thinking.className = 'chat__msg chat__msg--answer chat__thinking';
+    thinking.innerHTML = '<span class="chat__dots"><span></span><span></span><span></span></span> Pensando...';
+    thread.appendChild(thinking);
+    thinking.scrollIntoView({behavior: 'smooth', block: 'end'});
+
+    // readOnly (não disabled): campo `disabled` é excluído do POST pelo navegador —
+    // usar disabled aqui apagaria a pergunta antes de o form ser enviado.
+    textarea.readOnly = true;
+    btn.disabled = true;
+    btn.textContent = 'Enviando…';
+  });
+</script>
+{% endblock %}

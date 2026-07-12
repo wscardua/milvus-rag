@@ -10,6 +10,7 @@ Entre Django (UI) e FastAPI (`POST /query`, `POST /query/{query_id}/feedback`) e
   - `doc_type`/`delivery_phase`: valor da lista fechada (`reference/taxonomy.md`), igualdade simples.
   - `tags`: lista de 1+ strings; semântica **OR** — hit incluído se tiver **qualquer uma** das tags pedidas (não interseção). AND fica fora de escopo da POC.
 - `top_k?`: número de chunks a recuperar (**default: 5**)
+- `conversation_id?` (ADR-0016): UUID de uma conversa existente. Ausente → comportamento stateless (atual, inalterado). Presente → grava o turno na conversa (`query_log.conversation_id`/`turn_index`, `turn_index` calculado pelo servidor); se não for o primeiro turno da conversa, a pergunta passa por **query condensation** (ADR-0017) antes do retrieval. `conversation_id` inexistente → `404`.
 
 Parâmetros de retrieval: `top_k` default 5; abaixo de um **limiar de similaridade** (COSINE, valor a calibrar) a API responde "sem contexto suficiente" em vez de gerar. Geração feita pelo LM Studio (API OpenAI-compatível).
 
@@ -28,6 +29,13 @@ Parâmetros de retrieval: `top_k` default 5; abaixo de um **limiar de similarida
   - `snippet` (trecho de origem)
   - `score` (similaridade)
 - `linked_flow[]` (ADR-0008): documentos vinculados considerados na expansão do contexto — `source_document_id`, `target_document_id`, `link_type`, e flag `included` (false quando excluído por `substitui`).
+- `conversation_id`/`turn_index` (ADR-0016): ecoados na resposta quando a requisição informou `conversation_id`; ausentes em consulta stateless.
+
+## Conversação multi-turno (ADR-0016/ADR-0017)
+
+- Query condensation e schema de conversa detalhados no contrato **`conversations`**.
+- Cada turno é recuperado e citado de forma **independente** — chunks do turno anterior nunca entram diretamente no prompt do turno seguinte; o grounding vale por turno, não por conversa.
+- O bloco de histórico condensado usado no prompt de geração é só para tom/coerência — **nunca é fonte de citação**.
 
 ## Feedback (👍/👎) — ADR-0011
 

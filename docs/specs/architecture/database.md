@@ -19,8 +19,11 @@ Núcleo:
 - `ingestion_job` — estado (`pending`/`processing`/`indexed`/`failed`), `error`, timestamps + campos de fila (ADR-0009): `attempts`, `started_at`, `heartbeat_at`, `available_at`.
 
 Observabilidade (ADR-0011):
-- `query_log` — **toda** consulta. Pergunta, `filters`, `top_k`, `insufficient_context`, `answer`, `citations`/`linked_flow` (JSONB), e métricas de tuning: `scores[]`, `retrieved_chunk_ids[]`, `retrieved_document_ids[]`, `embedding_model`, `chat_model`, `chunk_size_words`, `chunk_overlap_words`, `retrieval_min_score`, `latency_ms`. Feedback: `rating` (1/-1, check), `rating_at`. **Sem FK** para `document`/`chunk` (snapshot em JSONB) — sobrevive à exclusão de documentos.
+- `query_log` — **toda** consulta. Pergunta, `filters`, `top_k`, `insufficient_context`, `answer`, `citations`/`linked_flow` (JSONB), e métricas de tuning: `scores[]`, `retrieved_chunk_ids[]`, `retrieved_document_ids[]`, `embedding_model`, `chat_model`, `chunk_size_words`, `chunk_overlap_words`, `retrieval_min_score`, `latency_ms`. Feedback: `rating` (1/-1, check), `rating_at`. **Sem FK** para `document`/`chunk` (snapshot em JSONB) — sobrevive à exclusão de documentos. **Conversação (ADR-0016):** `conversation_id` (nullable, FK → `conversation`) e `turn_index` (nullable, int, calculado pelo servidor) — nulos preservam consulta stateless.
 - `system_log` — eventos do sistema: `ts` (indexado), `level` (`INFO`/`WARN`/`ERROR`, check), `component` (`api`/`worker`/`ingestion`/`retrieval`, indexado), `event`, `message`, `context` (JSONB), `document_id?`, `job_id?`.
+
+Conversação (ADR-0016):
+- `conversation` — `id`, `title` (nullable, auto-gerado da 1ª pergunta), `squad_id` (nullable FK → `squad`, só conveniência de UI — não é filtro imposto no retrieval), `created_at`, `updated_at` (tocado a cada turno gravado).
 
 ## Regras
 
@@ -32,3 +35,4 @@ Observabilidade (ADR-0011):
 - **Exclusão de `document`** (ADR-0010, `DELETE /documents/{id}`): remove em cascade `chunk`, `ingestion_job` e `document_link`, **e** os vetores correspondentes no Milvus (por `document_id`), **e** o arquivo em disco — nenhum vetor órfão. `query_log` **não** é afetado (auditoria preservada).
 - `tags` como `text[]` com índice **GIN**; categoria/subcategoria via FK.
 - Índices por documento, por `delivery_process`/`squad`, por metadado filtrável, por `document_link` (source/target) e por (`state`, `available_at`) em `ingestion_job` (claim eficiente — ADR-0009).
+- **`conversation`/`query_log.turn_index`** (ADR-0016): `turn_index` é sempre calculado pelo servidor via `MAX(turn_index)+1` sob lock de linha (`SELECT ... FOR UPDATE`) na `conversation` referenciada — nunca aceito do cliente. Sem endpoint de exclusão de `conversation` nesta iteração.
